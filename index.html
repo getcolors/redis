@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Provision one Redis 7.2 server on one Vultr instance — loopback and VPC only, reached over an SSH tunnel, append-only persistence, RDB backup sets in Cloudflare R2 with a rehearsed restore.">
+  <title>Redis Package Skill — getcolors</title>
+  <style>
+    :root{color-scheme:light;--ink:#1f2328;--muted:#59636e;--line:#d0d7de;--soft:#f6f8fa;--blue:#0969da;--green:#1a7f37;--warn:#9a6700}*{box-sizing:border-box}body{margin:0;color:var(--ink);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:920px;margin:auto;padding:64px 28px 100px}h1{font-size:52px;line-height:1.05;margin:0}h2{margin-top:54px;padding-bottom:8px;border-bottom:1px solid var(--line)}h3{margin-top:30px}.lead{font-size:20px;color:var(--muted);max-width:790px}code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}pre{padding:18px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--soft)}:not(pre)>code{padding:.12em .35em;border-radius:5px;background:var(--soft)}a{color:var(--blue)}.eyebrow{color:var(--green);font-weight:700;letter-spacing:.08em}.callout{padding:16px 18px;border-left:4px solid var(--green);background:#dafbe1}.warning{border-color:var(--warn);background:#fff8c5}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.card{padding:18px;border:1px solid var(--line);border-radius:8px}.card h3{margin-top:0}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{padding:8px 10px;border:1px solid var(--line);text-align:left;vertical-align:top}th{background:var(--soft)}@media(max-width:650px){main{padding-top:38px}.grid{grid-template-columns:1fr}h1{font-size:40px}}
+  </style>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-4VKP1WY4QJ"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','G-4VKP1WY4QJ',{page_title:'Redis Package Skill — getcolors'});</script>
+<script src="https://rybbit.getcolors.ai/api/script.js" data-site-id="9fb9c41a6d49" defer></script>
+</head>
+<body><main>
+  <p class="eyebrow">GREEN PACKAGE SKILL · VULTR · REDIS</p>
+  <h1>Redis Package Skill</h1>
+  <p class="lead">A reproducible Green workflow for one Redis 7.2 server on one Vultr instance in its own VPC: one Docker Compose service with <code>noeviction</code> and an append-only file, a password generated on the host, published on loopback and the VPC address only, reached over an SSH tunnel — with RDB backup sets in Cloudflare R2 and a rehearsal verb that proves one of them restores.</p>
+
+  <div class="callout"><strong>Small on purpose, proven anyway.</strong> One machine, one service, a firewall opening 22 alone. What convergence proves is the round-trip, the configuration read back from the running server, the two refusals, the exact bind addresses, persistence across a restart, and a backup set with a completion marker.</div>
+
+  <h2>Quick start</h2>
+  <pre><code>npx skills add getcolors/redis
+cp .agents/skills/package-redis-green/green ./green
+chmod +x green
+./green build
+./green create --dry-run</code></pre>
+  <p>Build renders reproducible output and dry-run walks the workflow without provider side effects. Real creation and deletion require explicit authorization.</p>
+
+  <h2>What it builds</h2>
+  <div class="grid">
+    <div class="card"><h3>Infrastructure</h3><p>One Vultr VPC, one instance in it, a firewall group admitting 22 from <code>vultr-ssh-sources</code>, and in keygen mode the account SSH key named after the profile.</p></div>
+    <div class="card"><h3>Redis</h3><p>The pinned 7.2 image, <code>maxmemory-policy noeviction</code>, <code>appendfsync everysec</code> on a named volume, <code>requirepass</code> from a create-once host secret, published on <code>127.0.0.1</code> and the VPC address.</p></div>
+    <div class="card"><h3>Backups</h3><p>RDB sets streamed over the replication protocol, checked with <code>redis-check-rdb</code>, uploaded to R2 under <code>&lt;profile&gt;/redis/&lt;stamp&gt;/</code>, completed last after a read-back.</p></div>
+    <div class="card"><h3>Operator path</h3><p>An SSH tunnel through the generated <code>~/.ssh/config</code> alias, a <code>SET</code>/<code>GET</code> with the generated password, <code>NOAUTH</code> without it, and the public address not answering on the port.</p></div>
+  </div>
+
+  <h2>Recovery is rehearsed, not assumed</h2>
+  <p><code>./green rehearse</code> takes a fresh set, restores the newest completed one into a scratch container of the pinned image with the AOF off — a Redis 7 started with AOF on and no <code>appendonlydir/</code> ignores <code>dump.rdb</code> and starts empty — reads the smoke key back from it, and only then writes <code>.colors-recovery-verified</code> beside the sets.</p>
+
+  <div class="callout warning"><strong>Honest RPO.</strong> A restart loses at most a second of acknowledged writes. Losing the host loses the writes since the newest completed set: the rehearsal proves the set restores, and copying it into a fresh host is the operator's deliberate step.</div>
+
+  <h2>Credentials</h2>
+  <p>Every credential is a <code>COLORS_PAR_*</code> environment variable in a gitignored <code>.envrc.private</code>: the Vultr key, the state pair (reaches no host), and the backup pair — the one pair that reaches the host, scoped to the backup bucket. The Redis password is generated on the host and read over SSH.</p>
+
+  <p><a href="https://github.com/getcolors/redis">Source on GitHub</a> · <a href="https://github.com/getcolors/redis-vultr">The redis-vultr deployment</a> · <a href="https://www.getcolors.ai/skills">Skills Catalog</a></p>
+</main></body>
+</html>

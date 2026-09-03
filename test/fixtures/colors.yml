@@ -1,0 +1,23 @@
+# Keygen-mode fixture: no vultr-ssh-keys, so the package owns the keypair.
+profile: redis-fixture
+workdir: WORKDIR
+provider-compute: vultr
+provider-backend: local
+compute-prevent-destroy: true
+redis-image: docker.io/library/redis:7.2.16@sha256:74566c6910d13ae61e7ce73ebd3127438a1fe805b309b097c323142719ec8a5b
+redis-port: 6379
+redis-backup-r2-bucket: redis-backup-fixture
+redis-backup-r2-endpoint: https://fixture.r2.cloudflarestorage.com
+redis-backup-r2-region: auto
+redis-backup-oncalendar: "*-*-* 00/6:00:00"
+redis-backup-retention-days: 7
+redis-backup-max-age-hours: 8
+vultr-region: ams
+vultr-plan: vc2-1c-2gb
+vultr-os-id: 2284
+vultr-vpc-subnet: 10.60.0.0/24
+vultr-ssh-sources:
+  - 0.0.0.0/0
+  - "::/0"
+r2-bucket: tofu-state-fixture
+r2-endpoint: https://fixture.r2.cloudflarestorage.com

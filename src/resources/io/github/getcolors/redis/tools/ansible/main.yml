@@ -1,0 +1,221 @@
+---
+# Convergence for the Redis host.
+#
+# One machine, one Compose service, and gates that ask the system what it has
+# rather than trusting exit codes: the round-trip, the configuration Redis
+# actually runs with, the auth negatives, the bind addresses, persistence
+# across a restart, and a first backup set with a completion marker. The
+# password is create-once (`creates:`): regenerating it would lock every
+# client out of a service that still works. Quoting-heavy shell lives in the
+# installed scripts, not in this file — Ansible splits a shell block before
+# running it, counting quotes across comments, and a lone apostrophe in a
+# comment fails the play at load time.
+- name: Install Redis
+  hosts: redis
+  become: true
+  gather_facts: false
+  pre_tasks:
+    - ansible.builtin.wait_for_connection: {connect_timeout: 10, delay: 5, sleep: 5, timeout: 600}
+    - ansible.builtin.setup:
+  handlers:
+    - name: Bring up redis
+      ansible.builtin.command: docker compose up -d
+      args: {chdir: /opt/redis}
+    - name: Reload systemd
+      ansible.builtin.systemd_service: {daemon_reload: true}
+    - name: Restart sshd
+      ansible.builtin.service: {name: ssh, state: restarted}
+  tasks:
+    - name: Install Docker and the tools the scripts rely on
+      ansible.builtin.apt:
+        name: [docker.io, docker-compose-v2, ca-certificates, curl, jq, openssl,
+               python3, rclone]
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+    - ansible.builtin.systemd_service: {name: docker, enabled: true, state: started}
+    - ansible.builtin.file: {path: "{{ item.path }}", state: directory, mode: "{{ item.mode }}"}
+      loop:
+        - {path: /opt/redis, mode: "0755"}
+        - {path: /etc/redis, mode: "0755"}
+        - {path: /etc/redis/secrets, mode: "0700"}
+        - {path: /opt/colors, mode: "0755"}
+        - {path: /etc/colors, mode: "0755"}
+        - {path: /var/lib/colors, mode: "0755"}
+
+    # SSH is open to the internet by workspace convention, so these negative
+    # controls are the entire mitigation. Ubuntu ships 50-cloud-init.conf with
+    # `PasswordAuthentication yes`; this 10- file wins because sshd uses the
+    # FIRST value obtained for a keyword.
+    - name: Harden sshd
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/10-colors-redis.conf
+        mode: "0644"
+        content: |
+          PasswordAuthentication no
+          PermitRootLogin prohibit-password
+          KbdInteractiveAuthentication no
+      notify: Restart sshd
+
+    # The one operator secret on this host: the R2 pair the backup sets are
+    # written with. It arrives as Ansible env lookups resolved at execution
+    # time, so the rendered playbook in .colors/ carries the expression and
+    # never the value.
+    - name: Install the backup credential
+      ansible.builtin.copy:
+        dest: /etc/colors/backup-r2.env
+        mode: "0600"
+        content: |
+          BACKUP_R2_ACCESS_KEY_ID={{ lookup('env','COLORS_PAR_REDIS_BACKUP_R2_ACCESS_KEY_ID') }}
+          BACKUP_R2_SECRET_ACCESS_KEY={{ lookup('env','COLORS_PAR_REDIS_BACKUP_R2_SECRET_ACCESS_KEY') }}
+      no_log: true
+
+    - name: Refuse an empty backup credential
+      ansible.builtin.shell: |
+        set -euo pipefail
+        grep -q '^BACKUP_R2_ACCESS_KEY_ID=..*' /etc/colors/backup-r2.env || { echo "empty backup key id" >&2; exit 1; }
+        grep -q '^BACKUP_R2_SECRET_ACCESS_KEY=..*' /etc/colors/backup-r2.env || { echo "empty backup secret" >&2; exit 1; }
+      args: {executable: /bin/bash}
+      changed_when: false
+
+    # The password is born on this host and never leaves it: read it over SSH.
+    - name: Generate the Redis password once, on this host only
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        openssl rand -hex 24 > /etc/redis/secrets/password
+      args: {creates: /etc/redis/secrets/password, executable: /bin/bash}
+
+    # The configuration carries the password so that neither the command
+    # line nor the container environment does. Readable by the container
+    # redis user (uid 999) and nobody else. `bind 0.0.0.0` is the address
+    # INSIDE the container; what reaches it is decided by the two host
+    # bindings in the Compose file. noeviction: a full memory is an error to
+    # the writer, never a silently dropped key.
+    - name: Render the Redis configuration
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        pw=$(cat /etc/redis/secrets/password)
+        [ -n "$pw" ] || { echo "empty redis password" >&2; exit 1; }
+        {
+          printf 'requirepass %s\n' "$pw"
+          printf 'maxmemory-policy noeviction\n'
+          printf 'appendonly yes\n'
+          printf 'appendfsync everysec\n'
+          printf 'bind 0.0.0.0\n'
+          printf 'protected-mode yes\n'
+        } > /opt/redis/redis.conf.next
+        chown 999:999 /opt/redis/redis.conf.next
+        chmod 0400 /opt/redis/redis.conf.next
+        if cmp -s /opt/redis/redis.conf.next /opt/redis/redis.conf 2>/dev/null; then
+          rm -f /opt/redis/redis.conf.next; echo unchanged
+        else
+          mv /opt/redis/redis.conf.next /opt/redis/redis.conf; echo updated
+        fi
+      args: {executable: /bin/bash}
+      register: redis_conf
+      changed_when: "'updated' in redis_conf.stdout"
+      notify: Bring up redis
+
+    # template:, not copy: the Compose file reads the VPC address from the
+    # inventory. ansible.builtin.copy with src: does not template.
+    - name: Install the Compose file
+      ansible.builtin.template: {src: compose.yml, dest: /opt/redis/compose.yml, mode: "0644"}
+      notify: Bring up redis
+
+    - name: Install the operational scripts
+      ansible.builtin.copy: {src: "{{ item.src }}", dest: "{{ item.dest }}", mode: "0755"}
+      loop:
+        - {src: r2-env.sh, dest: /opt/colors/r2-env.sh}
+        - {src: redis-backup.sh, dest: /usr/local/sbin/redis-backup}
+        - {src: redis-restore-check.sh, dest: /usr/local/sbin/redis-restore-check}
+        - {src: redis-smoke.sh, dest: /usr/local/sbin/redis-smoke}
+        - {src: redis-monitor.sh, dest: /usr/local/sbin/redis-monitor}
+        - {src: redis-status.sh, dest: /usr/local/sbin/redis-status}
+
+    - ansible.builtin.meta: flush_handlers
+
+    - name: Enforce the running state
+      ansible.builtin.command: docker compose up -d
+      args: {chdir: /opt/redis}
+      register: redis_up
+      changed_when: "'Started' in redis_up.stderr or 'Recreated' in redis_up.stderr or 'Created' in redis_up.stderr"
+
+    - name: Wait for Redis
+      ansible.builtin.shell: |
+        set -euo pipefail
+        cd /opt/redis
+        docker compose exec -T -e REDISCLI_AUTH="$(cat /etc/redis/secrets/password)" redis redis-cli --no-auth-warning PING | grep -q PONG
+      args: {executable: /bin/bash}
+      register: redis_ping
+      changed_when: false
+      retries: 30
+      delay: 2
+      until: redis_ping.rc == 0
+
+    # The server-side gates: the round-trip, the configuration, the auth
+    # negatives, the bind addresses, and persistence across a restart.
+    - name: Prove the deployment works end to end
+      ansible.builtin.command: /usr/local/sbin/redis-smoke {{ vpc_ip }} {{ ansible_host }}
+      register: smoke
+      changed_when: false
+      retries: 3
+      delay: 10
+      until: smoke.rc == 0
+
+    - name: Install the timers
+      ansible.builtin.copy:
+        dest: "/etc/systemd/system/{{ item.name }}"
+        mode: "0644"
+        content: "{{ item.content }}"
+      loop:
+        - name: redis-backup.service
+          content: |
+            [Unit]
+            Description=Redis backup set
+            [Service]
+            Type=oneshot
+            ExecStart=/usr/local/sbin/redis-backup
+        - name: redis-backup.timer
+          content: |
+            [Unit]
+            Description=Redis backup set
+            [Timer]
+            OnCalendar=<{ redis-backup-oncalendar }>
+            Persistent=true
+            [Install]
+            WantedBy=timers.target
+        - name: redis-monitor.service
+          content: |
+            [Unit]
+            Description=Redis health check
+            [Service]
+            Type=oneshot
+            ExecStart=/usr/local/sbin/redis-monitor
+        - name: redis-monitor.timer
+          content: |
+            [Unit]
+            Description=Redis health check
+            [Timer]
+            OnCalendar=*:0/15
+            Persistent=true
+            [Install]
+            WantedBy=timers.target
+      notify: Reload systemd
+
+    - name: Enable the timers
+      ansible.builtin.systemd_service: {name: "{{ item }}", enabled: true, state: started, daemon_reload: true}
+      loop: [redis-backup.timer, redis-monitor.timer]
+
+    # A first set now, so the monitor has something to measure and the
+    # rehearsal has something to restore.
+    - name: Take the first backup set
+      ansible.builtin.command: /usr/local/sbin/redis-backup
+      register: first_set
+      changed_when: "'complete' in first_set.stdout"
+
+    - name: Run the monitor once so describe has a result
+      ansible.builtin.command: /usr/local/sbin/redis-monitor
+      changed_when: false
+      failed_when: false

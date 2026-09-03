@@ -1,0 +1,15 @@
+{
+  "all" : {
+    "children" : {
+      "redis" : {
+        "hosts" : {
+          "redis-fixture" : {
+            "ansible_host" : "192.0.2.10",
+            "ansible_user" : "root",
+            "vpc_ip" : "10.60.0.10"
+          }
+        }
+      }
+    }
+  }
+}
