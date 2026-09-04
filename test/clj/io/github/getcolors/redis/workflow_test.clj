@@ -122,6 +122,20 @@
     (is (not (str/includes? (:green/err r) "state holds")))
     (is (str/includes? (:green/err r) "COLORS_PAR_VULTR_API_KEY"))))
 
+(deftest a-real-create-on-a-fresh-work-directory-reports-the-credentials-not-a-crash
+  ;; A fresh clone has no `.colors/` yet, so the real state reader runs
+  ;; `tofu output` in a stage directory that does not exist and the SDK's
+  ;; shell raises a raw IOException. That is an unreadable state on a create
+  ;; — no state at all — and the run must reach the credentials check, not
+  ;; die on the exception. No stub: the real `state-output` runs.
+  (let [workdir (str (java.nio.file.Files/createTempDirectory
+                      "redis-fresh" (into-array java.nio.file.attribute.FileAttribute []))
+                     "/.colors")
+        r (workflow/start-step (assoc (fixture) :green/event :create :workdir workdir) {})]
+    (is (= 2 (:green/exit r)))
+    (is (str/includes? (:green/err r) "COLORS_PAR_VULTR_API_KEY"))
+    (is (not (str/includes? (:green/err r) "could not read")))))
+
 (deftest an-unreadable-backend-fails-a-real-delete-closed
   ;; Swallowing it is how a teardown ends up converging against 192.0.2.10.
   (let [r (start-unreadable (merge (fixture) credentials

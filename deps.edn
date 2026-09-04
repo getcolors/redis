@@ -2,13 +2,15 @@
  :deps {org.clojure/clojure       {:mvn/version "1.12.5"}
         io.github.getcolors/green {:git/url "https://github.com/getcolors/green.git"
                                    :git/sha "ceb4159a19ec281d60f10d11295c05c5de5f1c42"}
-        ;; eea43c2 is the first ONCE whose `compute` — the Compute Provider
-        ;; Standard's operations this package delegates to — words every
-        ;; message identically in all three colours (417d5f7 introduced the
-        ;; namespace); bc06f2f, below it, is where ONCE moved the machine
-        ;; keypair into the operator's ~/.ssh. The pin cannot go below either.
+        ;; 04f9623 is the first ONCE whose `compute` — the Compute Provider
+        ;; Standard's operations this package delegates to — survives a real
+        ;; create on a fresh work directory: its `read-state` treats the SDK's
+        ;; launch failure (no stage directory yet) as an unreadable state
+        ;; rather than crashing (417d5f7 introduced the namespace); bc06f2f,
+        ;; below it, is where ONCE moved the machine keypair into the
+        ;; operator's ~/.ssh. The pin cannot go below either.
         io.github.getcolors/once  {:git/url "https://github.com/getcolors/once.git"
-                                   :git/sha "eea43c2fe0d8c1d45d07ccfee41edc81ea4c7c6e"
+                                   :git/sha "04f9623159358882f6407618f804f70ce7067e54"
                                    :deps/root "green"}}
  :aliases {:dev {:extra-paths ["test/clj" "test/resources"]}
            :test {:extra-paths ["test/clj" "test/resources"]

@@ -80,7 +80,8 @@ protocol and Redis pieces from `../langfuse`.
   backend differently.** ONCE's `compute/read-state`, over the local
   `state-output`, returns `{:params m}` or `{:error e}` — and only the SDK's
   step error (an `ex-info` carrying `:dir`, what `green.tofu/outputs` throws)
-  counts as unreadable; anything else propagates as a defect. A real create
+  or the `java.io.IOException` the SDK raises when the stage directory does
+  not exist yet counts as unreadable; anything else propagates as a defect. A real create
   treats an error as no state (a fresh clone has none), a real delete,
   rehearse or describe fails on it rather than proceeding against nothing. A
   real converge whose compute output carries no `ip` is refused instead of
@@ -129,10 +130,11 @@ must not touch `~/.ssh`.
 
 ## Coupling
 
-`deps.edn` pins Green and ONCE. The ONCE pin can never go below `eea43c2`,
+`deps.edn` pins Green and ONCE. The ONCE pin can never go below `04f9623`,
 the first ONCE whose `compute` namespace — which this package's validation
-and lifecycle wiring require — words every message identically in all three
-colours; `bc06f2f`, the keypair floor, sits below it. Use `GREEN_LIB_ROOT`,
+and lifecycle wiring require — treats the SDK's launch failure on a fresh
+work directory as an unreadable state instead of crashing a real create;
+`bc06f2f`, the keypair floor, sits below it. Use `GREEN_LIB_ROOT`,
 `ONCE_LIB_ROOT` and `REDIS_LIB_ROOT` for working-tree development. `bb pin`
 stamps the payload from a clean pushed HEAD; deployment launchers are copies,
 not symlinks.
