@@ -1,6 +1,6 @@
 #!/usr/bin/env bb
-;; Redis launcher — one Redis 7.2 server on one Vultr instance, published on
-;; loopback and the VPC address only, reached over an SSH tunnel, with RDB
+;; Redis launcher — one Redis 7.2 server on one Vultr instance or DigitalOcean
+;; droplet, published on loopback only, reached over an SSH tunnel, with RDB
 ;; backup sets in Cloudflare R2.
 ;;
 ;; Desired state lives in colors.yml. Secrets are supplied only through

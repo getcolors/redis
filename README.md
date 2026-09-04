@@ -1,15 +1,19 @@
 # redis
 
 A green (Clojure/Babashka) Package Skill that provisions **one Redis 7.2
-server on one Vultr instance** in its own VPC: one Docker Compose service
-with `maxmemory-policy noeviction`, an append-only file on a named volume, a
-password generated on the host, published on loopback and the VPC address
-and nowhere else. RDB backup sets go to Cloudflare R2 with a completion
+server on one Vultr instance or one DigitalOcean droplet**: one Docker
+Compose service with `maxmemory-policy noeviction`, an append-only file on a
+named volume, a password generated on the host, published on loopback and
+nowhere else. RDB backup sets go to Cloudflare R2 with a completion
 protocol, and `./green rehearse` proves one of them restores.
 
-Nothing is published beyond loopback and the VPC. The firewall opens **22
-only**, there is no DNS record, and the supported client path is an SSH
-tunnel through the `~/.ssh/config` alias the package writes.
+Nothing is published beyond loopback and no private network is created. The
+provider firewall opens **22 only**, there is no DNS record, and the
+supported client path is an SSH tunnel through the `~/.ssh/config` alias the
+package writes. `provider-compute` picks `vultr` or `digitalocean` per the
+workspace Compute Provider Standard: one `colors.yml` may carry both key
+blocks, and switching on a profile that already holds a machine is refused
+until that machine is deleted.
 
 ## Install
 
@@ -46,7 +50,8 @@ Credentials are `COLORS_PAR_*` environment variables in a gitignored
 
 | Variable | For |
 |---|---|
-| `COLORS_PAR_VULTR_API_KEY` | compute |
+| `COLORS_PAR_VULTR_API_KEY` | compute, with `provider-compute: vultr` |
+| `COLORS_PAR_DO_TOKEN` | compute, with `provider-compute: digitalocean` |
 | `COLORS_PAR_R2_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` | OpenTofu state (operator machine only) |
 | `COLORS_PAR_REDIS_BACKUP_R2_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` | the backup sets — the one pair that reaches the host; scope it to the backup bucket |
 
@@ -69,8 +74,8 @@ ssh <profile> redis-status                                 # monitor, sets, mark
 On the host, every converge: a `SET`/`GET` round-trip; `noeviction`,
 `appendonly yes`, `appendfsync everysec` and `aof_enabled:1` read back from
 the running server; an unauthenticated `PING` answers `NOAUTH` and a wrong
-password is refused; the kernel lists exactly `127.0.0.1` and the VPC
-address on the port; the key survives `docker compose restart`; a first
+password is refused; the kernel lists exactly `127.0.0.1` on the port; the
+key survives `docker compose restart`; a first
 backup set lands with its `.complete` marker. From the workstation: the SSH
 tunnel round-trip with the generated password, the two refusals through it,
 and the public address **not** answering on the Redis port.

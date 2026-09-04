@@ -22,9 +22,10 @@
 (defn spec [source target data] {:template source :target target :data data :opts template-opts})
 (defn raw-spec [target content] (sc/content-spec target content))
 
-(defn cidrs [opts k]
-  (let [v (get opts k) xs (if (sequential? v) v (str/split (str v) #"[,\s]+"))]
-    (->> xs (map (comp str/trim str)) (remove str/blank?) vec)))
+(def cidrs
+  "The source lists as validate parses them, so the template and the
+  validator can never disagree about what an entry is."
+  validate/cidrs)
 
 (defn credential-env [opts & slots]
   (not-empty
@@ -33,25 +34,37 @@
          (apply merge (map #(validate/tofu-env opts %) (conj (vec slots) :provider-backend))))))
 (defn backend-credential-env [opts] (credential-env opts))
 
-;; Placeholder addresses for a build: the public address every stage renders
-;; against, and the VPC address only the inventory carries. Documentation
-;; ranges, so a rendered tree can never point at a real machine.
+;; The placeholder address for a build: a documentation range, so a rendered
+;; tree can never point at a real machine.
 (def placeholder-ip "192.0.2.10")
-(def placeholder-vpc-ip "10.60.0.10")
 
-(defn with-vpc-ip
-  "Tofu outputs `vpc_ip` with the underscore; the rest of this package speaks
-  `:vpc-ip`. Both are kept: ONCE's create matrix reads `:ssh_key_id` from the
-  same map, so renaming keys wholesale would hand it a map it cannot read."
-  [m]
-  (cond-> m
-    (and (map? m) (:vpc_ip m) (not (:vpc-ip m))) (assoc :vpc-ip (:vpc_ip m))))
-
-(defn fallback-params [opts]
-  {:ip placeholder-ip :vpc-ip placeholder-vpc-ip :user "root" :sudoer "root"
+(defn fallback-params
+  "What `build` and `--dry-run` render in place of a compute output: the
+  documentation address, shaped like the selected provider's real `params` so
+  every later stage sees the same keys either way. Both advertised providers
+  log in as root."
+  [opts]
+  {:provider (:provider-compute opts) :ip placeholder-ip :user "root" :sudoer "root"
    :name (validate/compute-name opts)})
-(defn output-params [result]
-  (some-> (get-in result [:tofu/outputs :params]) walk/keywordize-keys with-vpc-ip))
+
+(defn output-params
+  "The compute stage's `params`, keywordized but otherwise UNTOUCHED: ONCE's
+  create matrix reads `:ssh_key_id` with the underscore from this map, and a
+  renamed key reads as a key this deployment does not own."
+  [result]
+  (some-> (get-in result [:tofu/outputs :params]) walk/keywordize-keys))
+
+(defn resolved-compute
+  "Refuse to hand 192.0.2.10 to Ansible. That is the documentation address the
+  credential-free build and dry-run paths render with; on a real converge a
+  missing compute output must fail loudly rather than quietly point the whole
+  playbook at TEST-NET (Compute Provider Standard §4)."
+  [result fallback outputs]
+  (if (:ip outputs)
+    (merge result fallback outputs)
+    (assoc result :green/exit 1
+           :green/err (str "compute produced no ip output; refusing to converge "
+                           "against the documentation address"))))
 
 ;; Every backup set lives under `<profile>/redis/<stamp>/` in the backup
 ;; bucket; the recovery marker sits at `<profile>/.colors-recovery-verified`
@@ -62,15 +75,26 @@
 
 ;; ---------------------------------------------------------------- compute
 
-(defn infrastructure-data [opts]
+(defn infrastructure-data
+  "Template values for the compute stage. The name and the source list are
+  resolved here once, so a template interpolates values and never branches on
+  which provider it belongs to."
+  [opts]
   (assoc opts
          :compute-name (validate/compute-name opts)
          :ssh-keygen (validate/keygen? opts)
-         :ssh-sources-hcl (tofu/hcl-list (cidrs opts :vultr-ssh-sources))))
+         :ssh-sources-hcl (tofu/hcl-list (cidrs opts (validate/compute-key opts "ssh-sources")))))
+
+(defn infrastructure-template
+  "Providers are selected by template directory, `infrastructure/<provider>/`,
+  not by conditionals inside one file (Compute Provider Standard §3); the
+  rendered target is the same `main.tf` whichever directory it came from."
+  [opts]
+  (template (str "infrastructure." (:provider-compute opts)) "main.tf"))
 
 (defn infrastructure-step [opts]
   (let [dir (tool-dir opts infrastructure-tool)
-        specs [(spec (template "infrastructure" "main.tf") (str dir "/main.tf")
+        specs [(spec (infrastructure-template opts) (str dir "/main.tf")
                      (infrastructure-data opts))]
         result (tofu/tofu-with-spec opts specs
                                     {:dir dir :env (credential-env opts :provider-compute)})]
@@ -78,7 +102,7 @@
       (wf/failed? result) result
       (= :build (:green/event opts)) (merge result (fallback-params opts))
       (= :delete (:green/event opts)) result
-      :else (merge result (fallback-params opts) (output-params result)))))
+      :else (resolved-compute result (fallback-params opts) (output-params result)))))
 
 ;; ---------------------------------------------------------- ansible (local)
 
@@ -116,16 +140,13 @@
 ;; ---------------------------------------------------------------- ansible
 
 (defn inventory
-  "One host, carrying the one run-time fact the play needs beyond its address:
-  the VPC address Redis publishes on. A HOST var, read by the Compose template
-  on the host, so the rendered tree in `.colors/` carries no address of its
-  own beyond this file."
+  "One host. The address is the only run-time fact the play needs; the login
+  user is what both advertised providers' images give (`params.user`)."
   [opts]
   (json/generate-string
    {:all {:children {:redis {:hosts {(:profile opts)
                                      {:ansible_host (or (:ip opts) placeholder-ip)
-                                      :ansible_user "root"
-                                      :vpc_ip (or (:vpc-ip opts) placeholder-vpc-ip)}}}}}}
+                                      :ansible_user (or (:user opts) "root")}}}}}}
    {:pretty true}))
 
 (defn ansible-data
@@ -217,8 +238,8 @@
 
 (defn closed-port-args
   "A TCP connect to the machine's public address on the Redis port, bounded
-  by a timeout. It must FAIL: the port is bound to loopback and the VPC
-  address only and the firewall admits 22 alone."
+  by a timeout. It must FAIL: the port is bound to loopback only and the
+  firewall admits 22 alone."
   [ip port]
   ["bash" "-c" (str "timeout 5 bash -c 'exec 3<>/dev/tcp/" ip "/" port "'")])
 

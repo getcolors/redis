@@ -6,27 +6,37 @@ file covers only what is specific to `redis`.
 
 ## What this is
 
-A green-only Package Skill: one Redis 7.2 server on one Vultr instance in
-its own VPC — one Docker Compose service, published on loopback and the VPC
-address only, reached over an SSH tunnel, with RDB backup sets in Cloudflare
-R2 and a rehearsal verb that proves one of them restores. The first consumer
-is `../redis-vultr`. Code and tests are authoritative; the shape was taken
+A green-only Package Skill: one Redis 7.2 server on one Vultr instance or
+one DigitalOcean droplet — one Docker Compose service, published on loopback
+only, reached over an SSH tunnel, with RDB backup sets in Cloudflare R2 and
+a rehearsal verb that proves one of them restores. The first consumer is
+`../redis-vultr`. Code and tests are authoritative; the shape was taken
 from `../neon` (single node, no DNS, tunnel client path) and the backup-set
 protocol and Redis pieces from `../langfuse`.
 
 ## Things to understand before touching anything
 
 - **Exposure is decided by what Compose publishes.** Inside the container
-  Redis binds `0.0.0.0`; the two host bindings in `compose.yml` —
-  `127.0.0.1` and `{{ vpc_ip }}` — are the whole of what can reach it, and
-  the smoke gate asks the kernel (`ss -ltn`) that exactly those two listen.
-  The VPC address is a run-time fact: it reaches the Compose file through
-  the inventory and Ansible's `template:`, never through Selmer, so the
-  rendered tree in `.colors/` carries no address of its own.
+  Redis binds `0.0.0.0`; the one host binding in `compose.yml`, `127.0.0.1`,
+  is the whole of what can reach it, and the smoke gate asks the kernel
+  (`ss -ltn`) that exactly that one listens. There is no private-address
+  binding any more: the VPC and its `{{ vpc_ip }}` were dropped when the
+  package adopted the Compute Provider Standard, because a single-node
+  package creates no private network and nothing ever used it.
+- **Two providers, one registry.** `validate/compute-providers` is the
+  Compute Provider Standard's registry (`../workspace/standards/
+  compute-provider.md`): required keys, secrets and the OpenTofu environment
+  derive from the selected entry alone; the template comes from
+  `tools/infrastructure/<provider>/`; `params.provider` records which one
+  produced the state, and a real create or delete refuses a mismatch before
+  looking at credentials. A provider without a fixture and a golden per
+  keypair mode is not advertised. Vultr is the default and what a legacy
+  state without `params.provider` is taken to be.
 - **Docker's published ports bypass ufw.** The Vultr image ships ufw enabled
-  with 22 alone; the provider firewall group (22 only) and the bindings are
-  the load-bearing layers, and the workstation-side acceptance proves the
-  public address does not answer on the Redis port.
+  with 22 alone, the DigitalOcean one ships none; the provider firewall (22
+  only) and the loopback binding are the load-bearing layers, and the
+  workstation-side acceptance proves the public address does not answer on
+  the Redis port.
 - **The password is create-once on the host** (`/etc/redis/secrets/password`)
   and lives in `redis.conf`, readable by uid 999 alone — never on a command
   line, never in the container environment. Scripts hand it to `redis-cli`
@@ -52,7 +62,12 @@ protocol and Redis pieces from `../langfuse`.
 - **`state-output` keeps `:ssh_key_id` with the underscore.** ONCE's create
   matrix reads it from the map `state-fn` returns; renaming it makes the
   deployment's own key read as foreign and the never-adopt rule refuses it.
-  `:vpc-ip` is added beside `:vpc_ip`, never instead.
+- **The state is read once, up front, and two events treat an unreadable
+  backend differently.** `read-state` returns `{:params m}` or `{:error e}`;
+  a real create treats an error as no state (a fresh clone has none), a real
+  delete, rehearse or describe fails on it rather than proceeding against
+  nothing. A real converge whose compute output carries no `ip` is refused
+  instead of converging against `192.0.2.10`.
 
 ## Verbs beyond the lifecycle
 
@@ -67,14 +82,16 @@ Born conforming to three workspace standards. Read
 `../workspace/standards/ssh-keypair.md` before touching `ssh.clj`,
 `../workspace/standards/ssh-config.md` before touching `ssh_config.clj`, and
 `../workspace/standards/compute-name.md` for why there is no required
-`vultr-name`. Build and dry-run render `/home/build-placeholder/.ssh/<profile>`
-rather than reading `~/.ssh`.
+`<provider>-name`, and `../workspace/standards/compute-provider.md` before
+touching the registry, the template directories, or the state read. Build and
+dry-run render `/home/build-placeholder/.ssh/<profile>` rather than reading
+`~/.ssh`.
 
 ## Commands
 
 ```sh
 bb test
-bb golden                  # two fixtures: keygen and opt-out
+bb golden                  # four fixtures: keygen and opt-out, per provider
 bb golden:accept           # only after reading the diff
 bb syntax                  # offline ansible-playbook --syntax-check + bash -n
 ./scripts/launcher.sh

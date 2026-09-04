@@ -7,9 +7,9 @@ Non-secret values only: credentials are `COLORS_PAR_*` environment variables.
 
 | Key | Meaning |
 |---|---|
-| `profile` | Names the work directory, the OpenTofu state key (`<profile>/<stage>.tfstate`), the machine keypair, the `~/.ssh/config` alias, the Vultr resources, and the backup prefix (`<profile>/redis/`). Never overlay it from the environment. |
+| `profile` | Names the work directory, the OpenTofu state key (`<profile>/<stage>.tfstate`), the machine keypair, the `~/.ssh/config` alias, the provider resources, and the backup prefix (`<profile>/redis/`). Never overlay it from the environment. |
 | `workdir` | Where rendered output goes. Conventionally `.colors`. |
-| `provider-compute` | Must be `vultr`. |
+| `provider-compute` | `vultr` (default) or `digitalocean`. Selects the template under `tools/infrastructure/<provider>/` and which `<provider>-*` keys are required; the other provider's keys are ignored. Changing it on a profile whose state holds a machine is refused on create and delete until that machine is deleted under its own provider. |
 | `provider-backend` | `local`, `s3` or `r2`. |
 | `compute-prevent-destroy` | Keep `true` in committed desired state. |
 
@@ -21,7 +21,7 @@ by name. The firewall opens 22 only and the client path is an SSH tunnel.
 | Key | Meaning |
 |---|---|
 | `redis-image` | The server image. Must be pinned by digest (`tag@sha256:...`): Docker Hub republishes the `7.2` and `7.2.16` tags whenever the base image is rebuilt. |
-| `redis-port` | The port published on `127.0.0.1` and on the VPC address (1–65535). Inside the container Redis listens on 6379 regardless. |
+| `redis-port` | The port published on `127.0.0.1` and nowhere else (1–65535). Inside the container Redis listens on 6379 regardless. |
 
 The server always runs with `maxmemory-policy noeviction`, `appendonly yes`,
 `appendfsync everysec`, `protected-mode yes` and `requirepass` set to the
@@ -45,17 +45,35 @@ uploaded snapshot was read back and hashed. `./green rehearse` writes
 `<profile>/.colors-recovery-verified` beside the sets after a restore and
 read-back succeed.
 
-## Vultr
+## Vultr (`provider-compute: vultr`)
 
 | Key | Meaning |
 |---|---|
-| `vultr-name` | Optional. The machine, its firewall group and its VPC are named after the profile (Compute Name Standard); set this only to override. |
+| `vultr-name` | Optional. The machine and its firewall group are named after the profile (Compute Name Standard); set this only to override. |
 | `vultr-region` | e.g. `ams`. |
 | `vultr-plan` | e.g. `vc2-1c-2gb`. |
 | `vultr-os-id` | Numeric OS id; 2284 is Ubuntu 24.04 LTS x64. |
-| `vultr-vpc-subnet` | The VPC's IPv4 CIDR, e.g. `10.60.0.0/24`. Redis is published on the instance's address in it beside loopback. A Vultr firewall group filters the private interface too, so a future peer needs a `/32` rule as well as the binding. |
 | `vultr-ssh-keys` | Optional. Absent selects keygen mode (the package owns `~/.ssh/<profile>`); an existing account key id selects opt-out mode. |
-| `vultr-ssh-sources` | CIDRs allowed to reach 22 — the only open port. |
+| `vultr-ssh-sources` | CIDRs allowed to reach 22 — the only open port. At least one entry, every entry a syntactically valid IPv4 or IPv6 CIDR; refused before any provider call otherwise. |
+
+No VPC is attached. There is no `vultr-vpc-subnet` any more: the binding on
+a private address was removed when the package adopted the Compute Provider
+Standard, and a key left over from an older `colors.yml` is ignored.
+
+## DigitalOcean (`provider-compute: digitalocean`)
+
+| Key | Meaning |
+|---|---|
+| `digitalocean-name` | Optional. The droplet and its firewall are named after the profile; set this only to override. Must be hostname-like (lowercase letters, digits, dots, hyphens). |
+| `digitalocean-region` | e.g. `ams3`. |
+| `digitalocean-size` | e.g. `s-1vcpu-2gb`. |
+| `digitalocean-image` | e.g. `ubuntu-24-04-x64`. |
+| `digitalocean-ssh-keys` | Optional. Absent selects keygen mode; an existing account key id or fingerprint selects opt-out mode. |
+| `digitalocean-ssh-sources` | CIDRs allowed to reach 22 — the only open port. Same validation as the Vultr key. |
+
+The droplet joins the region's default VPC (`default-<region>`), discovered
+at plan time. `digitalocean-vpc-uuid` and `digitalocean-vpc-cidr` are refused:
+this package must not own a private network.
 
 ## State backend
 
@@ -67,7 +85,8 @@ read-back succeed.
 
 | Variable | Used for |
 |---|---|
-| `COLORS_PAR_VULTR_API_KEY` | The VPC, the instance, the firewall, and the account SSH key. |
+| `COLORS_PAR_VULTR_API_KEY` | With `provider-compute: vultr`: the instance, the firewall group, and the account SSH key. |
+| `COLORS_PAR_DO_TOKEN` | With `provider-compute: digitalocean`: the droplet, the firewall, and the account SSH key. |
 | `COLORS_PAR_R2_ACCESS_KEY_ID` / `COLORS_PAR_R2_SECRET_ACCESS_KEY` | The tofu state backend (operator machine only). |
 | `COLORS_PAR_REDIS_BACKUP_R2_ACCESS_KEY_ID` / `COLORS_PAR_REDIS_BACKUP_R2_SECRET_ACCESS_KEY` | The one pair that reaches the host: the backup sets. Use a token scoped to the backup bucket with Object Read & Write. |
 

@@ -2,8 +2,9 @@
 # Credentials belong in the gitignored .envrc.private as COLORS_PAR_* variables.
 # Never export COLORS_PAR_PROFILE: it selects this deployment's remote state.
 #
-# Required credentials:
+# Required credentials (the compute one follows provider-compute):
 #   Vultr            COLORS_PAR_VULTR_API_KEY
+#   DigitalOcean     COLORS_PAR_DO_TOKEN
 #   state in R2      COLORS_PAR_R2_ACCESS_KEY_ID
 #                    COLORS_PAR_R2_SECRET_ACCESS_KEY
 #                    (the tofu-state bucket; reaches no host)
@@ -13,14 +14,17 @@
 #                    pair that reaches the host)
 #
 # There is no DNS provider and no public Redis port: Redis is published on
-# loopback and the VPC address only, the firewall opens 22 alone, and the
-# client path is an SSH tunnel (ssh -L 6379:127.0.0.1:6379 <profile>). The
+# loopback only, the firewall opens 22 alone, and the client path is an SSH
+# tunnel (ssh -L 6379:127.0.0.1:6379 <profile>). No private network is
+# created on any provider (workspace standards/compute-provider.md). The
 # password is generated on the server during convergence (create-once at
 # /etc/redis/secrets/password) and is never operator-supplied.
 
 profile: redis-example
 workdir: .colors
 
+# vultr or digitalocean. Switching on a profile that already holds a machine
+# is refused: set it back, delete, then create on the new provider.
 provider-compute: vultr
 provider-backend: r2
 
@@ -37,7 +41,7 @@ compute-prevent-destroy: true
 # appendfsync everysec on a named volume, so a restart keeps every
 # acknowledged write older than about a second.
 redis-image: docker.io/library/redis:7.2.16@sha256:74566c6910d13ae61e7ce73ebd3127438a1fe805b309b097c323142719ec8a5b
-# The port published on 127.0.0.1 and on the VPC address of the host.
+# The port published on 127.0.0.1 of the host, and nowhere else.
 redis-port: 6379
 
 # --- Backups in R2 ------------------------------------------------------------
@@ -57,19 +61,15 @@ redis-backup-retention-days: 7
 # A newest completed set older than this fails the monitor (and `describe`).
 redis-backup-max-age-hours: 8
 
-# --- Vultr --------------------------------------------------------------------
+# --- Vultr (read when provider-compute: vultr) -------------------------------
 
-# No vultr-name: per workspace standards/compute-name.md the machine, its
-# firewall group and its VPC are named after the profile.
+# No vultr-name: per workspace standards/compute-name.md the machine and its
+# firewall group are named after the profile.
 vultr-region: ams
 # 1 vCPU / 2 GiB: Redis is single-threaded and this is a cache/queue tier.
 vultr-plan: vc2-1c-2gb
 # Vultr operating systems are numeric ids; 2284 is Ubuntu 24.04 LTS x64.
 vultr-os-id: 2284
-# The private network Redis is published on beside loopback. Nothing else is
-# on it yet; a future peer needs a firewall rule for its /32 as well, because
-# a Vultr firewall group filters the private interface too.
-vultr-vpc-subnet: 10.60.0.0/24
 
 # No vultr-ssh-keys: keygen mode per workspace standards/ssh-keypair.md. The
 # package generates and owns ~/.ssh/<profile> and registers the account key
@@ -81,6 +81,21 @@ vultr-vpc-subnet: 10.60.0.0/24
 vultr-ssh-sources:
   - 0.0.0.0/0
   - "::/0"
+
+# --- DigitalOcean (read when provider-compute: digitalocean) -----------------
+
+# The same deployment on a droplet: keep both blocks and switch providers by
+# editing provider-compute alone; the unselected block is ignored. The droplet
+# joins the region's default VPC, which is discovered, never created — a
+# digitalocean-vpc-uuid or digitalocean-vpc-cidr key is refused.
+# digitalocean-region: ams3
+# digitalocean-size: s-1vcpu-2gb
+# digitalocean-image: ubuntu-24-04-x64
+# digitalocean-ssh-sources:
+#   - 0.0.0.0/0
+#   - "::/0"
+# No digitalocean-name and no digitalocean-ssh-keys, for the same reasons as
+# their Vultr counterparts.
 
 # --- OpenTofu state backend ---------------------------------------------------
 

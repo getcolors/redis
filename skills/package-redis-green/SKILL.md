@@ -1,15 +1,16 @@
 ---
 name: package-redis-green
-description: Provision and manage one Redis 7.2 server on one Vultr instance — published on loopback and the VPC address only, reached over an SSH tunnel, with an append-only file for persistence and RDB backup sets in Cloudflare R2 that a rehearsal verb restores and reads back — using OpenTofu and Ansible. Use when asked to deploy, converge, back up, rehearse recovery for, inspect or tear down a single-node Redis, or to work on a colors.yml for a redis deployment.
+description: Provision and manage one Redis 7.2 server on one Vultr instance or DigitalOcean droplet — published on loopback only, reached over an SSH tunnel, with an append-only file for persistence and RDB backup sets in Cloudflare R2 that a rehearsal verb restores and reads back — using OpenTofu and Ansible. Use when asked to deploy, converge, back up, rehearse recovery for, inspect or tear down a single-node Redis, or to work on a colors.yml for a redis deployment.
 ---
 
 # Redis Package Skill (Green)
 
-Provisions one Vultr instance in its own VPC and converges **Redis 7.2**
-on it as one Docker Compose service: `maxmemory-policy noeviction`, an
-append-only file (`appendfsync everysec`) on a named volume, a password
-generated on the host, published on `127.0.0.1` and the VPC address and
-nowhere else. The firewall opens **22 only**; the client path is an SSH
+Provisions one machine on **Vultr or DigitalOcean** (`provider-compute`)
+and converges **Redis 7.2** on it as one Docker Compose service:
+`maxmemory-policy noeviction`, an append-only file (`appendfsync everysec`)
+on a named volume, a password generated on the host, published on
+`127.0.0.1` and nowhere else. No private network is created on either
+provider. The provider firewall opens **22 only**; the client path is an SSH
 tunnel through the `~/.ssh/config` alias the package writes. RDB snapshot
 sets go to Cloudflare R2 with a completion protocol, and `rehearse` proves
 one of them restores.
@@ -58,9 +59,12 @@ launcher walks up from the working directory to find `colors.yml`.
 
 ## Credentials
 
+Only the selected provider's credential is required.
+
 | Variable | For |
 |---|---|
-| `COLORS_PAR_VULTR_API_KEY` | the VPC, the firewall group, the instance, the account SSH key |
+| `COLORS_PAR_VULTR_API_KEY` | `provider-compute: vultr` — the firewall group, the instance, the account SSH key |
+| `COLORS_PAR_DO_TOKEN` | `provider-compute: digitalocean` — the firewall, the droplet, the account SSH key |
 | `COLORS_PAR_R2_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` | OpenTofu state only; reaches no host |
 | `COLORS_PAR_REDIS_BACKUP_R2_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` | the backup sets — the one pair that reaches the host; Object Read & Write on the backup bucket only |
 
@@ -72,7 +76,7 @@ operator-supplied.
 
 | Stage | What it manages |
 |---|---|
-| `redis-infrastructure` | one Vultr VPC, one instance in it, a firewall opening 22 only, and in keygen mode the account SSH key named after the profile |
+| `redis-infrastructure` | one Vultr instance or one DigitalOcean droplet, a provider firewall opening 22 only, and in keygen mode the account SSH key named after the profile; the template is chosen by `provider-compute` and `params.provider` records which one produced the state |
 | `redis-ssh-config` | the `~/.ssh/config` block, so `ssh <profile>` works |
 | `redis-ansible` | Docker Compose with the pinned image, the generated password, the smoke gate, the backup and monitor timers, and the first backup set |
 | acceptance | the operator path from the workstation: an SSH tunnel through the generated alias, a `SET`/`GET` round-trip with the generated password, an unauthenticated `PING` refused, a wrong password refused, and the public address **not** answering on the Redis port |
@@ -86,8 +90,8 @@ Gates that run on every converge and fail it if they fail:
   `aof_enabled:1`, a 7.2 server — read back from the running server, not
   from the file
 - an unauthenticated `PING` answers `NOAUTH`; a wrong password is refused
-- the kernel lists exactly two listeners on the port: `127.0.0.1` and the
-  VPC address; the public address does not answer
+- the kernel lists exactly one listener on the port, `127.0.0.1`; the
+  public address does not answer
 - the key written above survives `docker compose restart` and
   `aof_last_write_status:ok` holds afterwards
 - a first backup set lands in R2 with its `.complete` marker
@@ -123,6 +127,18 @@ REDISCLI_AUTH=$(ssh <profile> cat /etc/redis/secrets/password) redis-cli -p 6379
 
 `ssh <profile> redis-status` prints the monitor result, the completed sets,
 the recovery marker and the container state.
+
+## Compute providers
+
+`provider-compute` selects `vultr` (the default) or `digitalocean`; each has
+its own `<provider>-*` keys and template, one `colors.yml` may carry both
+blocks, and the unselected block is ignored. **Switching is a rebuild, never
+an apply:** every provider shares one state key, so a real `create` or
+`delete` on a profile whose state records a different provider is refused
+with `state holds a <provider> machine; set provider-compute back to
+<provider> and delete first`, before any credential is checked. A deployment
+created before the package recorded a provider counts as Vultr. On a real
+`delete`, a backend that cannot be read is an error, never an empty state.
 
 ## Reference
 

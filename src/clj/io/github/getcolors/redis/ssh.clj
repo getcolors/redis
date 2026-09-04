@@ -2,8 +2,9 @@
   "The deployment's machine keypair, per the workspace SSH Keypair Standard.
 
   The behaviour itself is ONCE's (`io.github.getcolors.once.ssh`): keygen mode
-  when desired state carries no `vultr-ssh-keys`, an ed25519 key named after
-  the profile in `~/.ssh`, the create matrix, the Vultr REST preflight, and a
+  when desired state carries no `<provider>-ssh-keys`, an ed25519 key named
+  after the profile in `~/.ssh`, the create matrix, the provider's REST
+  preflight (DigitalOcean and Vultr both dispatch there by name), and a
   cleanup that runs only after a successful destroy. Reusing it rather than
   reimplementing means one standard has one implementation, and a fix upstream
   reaches this package when the pin moves.
@@ -47,7 +48,7 @@
           (assoc opts
                  :ssh-private-key-path prv
                  :ssh-public-key-path pub
-                 :vultr-ssh-keys pub))))))
+                 (once-ssh/machine-key-keys (:provider-compute opts)) pub))))))
 
 (defn ensure-key!
   "The standard's create matrix and key generation, on a real create."
@@ -55,7 +56,7 @@
   (once-ssh/ensure-key! opts state-fn))
 
 (defn preflight!
-  "Refuse a real create when the Vultr account holds a key named after the
+  "Refuse a real create when the provider account holds a key named after the
   profile that this deployment's state does not own."
   [opts]
   (once-ssh/preflight! opts))

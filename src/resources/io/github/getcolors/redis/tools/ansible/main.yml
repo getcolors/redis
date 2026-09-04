@@ -118,10 +118,8 @@
       changed_when: "'updated' in redis_conf.stdout"
       notify: Bring up redis
 
-    # template:, not copy: the Compose file reads the VPC address from the
-    # inventory. ansible.builtin.copy with src: does not template.
     - name: Install the Compose file
-      ansible.builtin.template: {src: compose.yml, dest: /opt/redis/compose.yml, mode: "0644"}
+      ansible.builtin.copy: {src: compose.yml, dest: /opt/redis/compose.yml, mode: "0644"}
       notify: Bring up redis
 
     - name: Install the operational scripts
@@ -157,7 +155,7 @@
     # The server-side gates: the round-trip, the configuration, the auth
     # negatives, the bind addresses, and persistence across a restart.
     - name: Prove the deployment works end to end
-      ansible.builtin.command: /usr/local/sbin/redis-smoke {{ vpc_ip }} {{ ansible_host }}
+      ansible.builtin.command: /usr/local/sbin/redis-smoke {{ ansible_host }}
       register: smoke
       changed_when: false
       retries: 3

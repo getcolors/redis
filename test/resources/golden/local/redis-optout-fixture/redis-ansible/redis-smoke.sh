@@ -2,10 +2,9 @@
 # Server-side acceptance for the Redis host, run during convergence.
 #
 # Exit codes are not evidence; each gate asks the system what it actually has.
-# Usage: redis-smoke <vpc-ip> <public-ip>
+# Usage: redis-smoke <public-ip>
 set -euo pipefail
-vpc_ip="${1:?usage: redis-smoke <vpc-ip> <public-ip>}"
-public_ip="${2:?usage: redis-smoke <vpc-ip> <public-ip>}"
+public_ip="${1:?usage: redis-smoke <public-ip>}"
 port=6379
 cd /opt/redis
 pw=$(cat /etc/redis/secrets/password)
@@ -40,11 +39,11 @@ grep -qE 'WRONGPASS|NOAUTH' <<<"$wrong" || fail "a wrong password answered '$wro
 grep -q PONG <<<"$wrong" && fail "a wrong password was accepted"
 
 # --- S4 the bind addresses -------------------------------------------------------
-# Only loopback and the VPC address may listen on the port: never the public
-# address, never a wildcard. Docker publishes exactly what the Compose file
-# says, and this is where that claim is checked against the kernel.
+# Only loopback may listen on the port: never the public address, never a
+# private one, never a wildcard. Docker publishes exactly what the Compose
+# file says, and this is where that claim is checked against the kernel.
 listeners=$(ss -ltnH "sport = :$port" | awk '{print $4}' | sort -u)
-expected=$(printf '127.0.0.1:%s\n%s:%s\n' "$port" "$vpc_ip" "$port" | sort -u)
+expected="127.0.0.1:$port"
 [ "$listeners" = "$expected" ] || fail "port $port listeners are [$(tr '\n' ' ' <<<"$listeners")], expected [$(tr '\n' ' ' <<<"$expected")]"
 if timeout 3 bash -c "exec 3<>/dev/tcp/$public_ip/$port" 2>/dev/null; then
   fail "the public address $public_ip answers on port $port"

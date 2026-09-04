@@ -1,12 +1,12 @@
-# Redis 7.2 on loopback and the VPC address, nowhere else. The configuration
-# file carries the password so that neither the command line nor the
-# container environment does; the healthcheck reads it from that file.
+# Redis 7.2 on loopback, nowhere else. The configuration file carries the
+# password so that neither the command line nor the container environment
+# does; the healthcheck reads it from that file.
 #
-# This file is an Ansible template on the host: `{{ vpc_ip }}` is the
-# machine's VPC address from the inventory, a run-time fact that never enters
-# the rendered tree in .colors/. Exposure is decided here, by what is
-# published: inside the container Redis binds every interface, and the two
-# host bindings are the whole of what can reach it.
+# Exposure is decided here, by what is published: inside the container Redis
+# binds every interface, and the one host binding — 127.0.0.1 — is the whole
+# of what can reach it. No private network: a single-node package creates
+# none (Compute Provider Standard §5), and the supported client path is an
+# SSH tunnel to this loopback port.
 name: redis
 services:
   redis:
@@ -15,7 +15,6 @@ services:
     command: ["redis-server", "/etc/redis/redis.conf"]
     ports:
       - "127.0.0.1:<{ redis-port }>:6379"
-      - "{{ vpc_ip }}:<{ redis-port }>:6379"
     volumes:
       - /opt/redis/redis.conf:/etc/redis/redis.conf:ro
       - redis-data:/data

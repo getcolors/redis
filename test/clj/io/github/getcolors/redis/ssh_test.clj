@@ -10,7 +10,7 @@
             [clojure.test :refer [deftest is testing]]
             [io.github.getcolors.once.ssh :as once-ssh]
             [io.github.getcolors.redis.ssh :as ssh]
-            [io.github.getcolors.redis.validate-test :refer [fixture optout]]))
+            [io.github.getcolors.redis.validate-test :refer [fixture optout do-fixture]]))
 
 (defn- with-home
   "Run `f` with `~/.ssh` redirected into a fresh temporary home."
@@ -33,7 +33,11 @@
       (let [opts (ssh/with-machine-key (assoc (fixture) :green/event :build))]
         (is (str/starts-with? (:ssh-public-key-path opts) ssh/build-placeholder-dir))
         (is (= (:ssh-public-key-path opts) (:vultr-ssh-keys opts)))
-        (is (not (str/includes? (:ssh-private-key-path opts) (System/getProperty "user.home"))))))))
+        (is (not (str/includes? (:ssh-private-key-path opts) (System/getProperty "user.home")))))
+      ;; The placeholder lands on the SELECTED provider's machine-key key.
+      (let [opts (ssh/with-machine-key (assoc (do-fixture) :green/event :build))]
+        (is (= (:ssh-public-key-path opts) (:digitalocean-ssh-keys opts)))
+        (is (nil? (:vultr-ssh-keys opts)))))))
 
 (deftest real-events-render-the-real-path
   (with-home

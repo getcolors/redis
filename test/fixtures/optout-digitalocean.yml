@@ -1,0 +1,23 @@
+# Opt-out fixture: an explicit account key id, so the package creates no key.
+profile: redis-digitalocean-optout
+workdir: WORKDIR
+provider-compute: digitalocean
+provider-backend: local
+compute-prevent-destroy: true
+redis-image: docker.io/library/redis:7.2.16@sha256:74566c6910d13ae61e7ce73ebd3127438a1fe805b309b097c323142719ec8a5b
+redis-port: 6379
+redis-backup-r2-bucket: redis-backup-fixture
+redis-backup-r2-endpoint: https://fixture.r2.cloudflarestorage.com
+redis-backup-r2-region: auto
+redis-backup-oncalendar: "*-*-* 00/6:00:00"
+redis-backup-retention-days: 7
+redis-backup-max-age-hours: 8
+digitalocean-region: ams3
+digitalocean-size: s-1vcpu-2gb
+digitalocean-image: ubuntu-24-04-x64
+digitalocean-ssh-sources:
+  - 0.0.0.0/0
+  - "::/0"
+r2-bucket: tofu-state-fixture
+r2-endpoint: https://fixture.r2.cloudflarestorage.com
+digitalocean-ssh-keys: "00000000"

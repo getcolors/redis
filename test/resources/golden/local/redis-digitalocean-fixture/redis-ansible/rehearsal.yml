@@ -1,0 +1,42 @@
+---
+# The recovery rehearsal, in the order recovery actually happens: a fresh
+# set, its restore into a scratch instance of the pinned image, the smoke key
+# read back from the restored data. Only after all of it does the recovery
+# marker land -- a separate marker from a converge's success, because "the
+# service answers" and "the service can be recovered" are different claims
+# and automation must be able to tell them apart.
+- name: Rehearse recovery from a backup set
+  hosts: redis
+  become: true
+  gather_facts: false
+  pre_tasks:
+    - ansible.builtin.wait_for_connection: {connect_timeout: 10, delay: 0, sleep: 5, timeout: 300}
+  tasks:
+    - name: Take a fresh backup set
+      ansible.builtin.command: /usr/local/sbin/redis-backup
+      register: backup
+      changed_when: true
+    - ansible.builtin.debug:
+        msg: "{{ backup.stdout_lines }}"
+
+    - name: Restore the newest completed set into a scratch instance and read the smoke key back
+      ansible.builtin.command: /usr/local/sbin/redis-restore-check
+      register: restore
+      changed_when: true
+    - ansible.builtin.debug:
+        msg: "{{ restore.stdout_lines }}"
+    - name: Record the restored set
+      ansible.builtin.set_fact:
+        restored_set: "{{ restore.stdout | regex_search('set=(\\S+)', '\\1') | first }}"
+
+    - name: Record that recovery was rehearsed
+      ansible.builtin.shell: |
+        set -euo pipefail
+        . /opt/colors/r2-env.sh
+        r2_put_string "$PROFILE set={{ restored_set }} at=$(stamp_now)" "backup:$BACKUP_BUCKET/$PROFILE/.colors-recovery-verified"
+        echo "recovery marker written for set {{ restored_set }}"
+      args: {executable: /bin/bash}
+      register: marker
+      changed_when: true
+    - ansible.builtin.debug:
+        msg: "{{ marker.stdout_lines }}"
