@@ -6,6 +6,7 @@
             [green.progress :as progress]
             [green.tofu :as tofu]
             [green.workflow :as wf]
+            [io.github.getcolors.once.compute :as compute]
             [io.github.getcolors.redis.ssh :as ssh]
             [io.github.getcolors.redis.ssh-config :as ssh-config]
             [io.github.getcolors.redis.tools :as tools]
@@ -17,8 +18,9 @@
 
 (defn state-output
   "Compute params recorded in the infrastructure state; nil when the state
-  holds none. An unreadable backend throws — `read-state` is where the two are
-  told apart, because create and delete treat them differently.
+  holds none. An unreadable backend throws the SDK's step error, which
+  `compute/read-state` turns into `{:error message}` — create and delete
+  treat the two differently. Kept local so tests can redefine it.
 
   Keywordized but otherwise UNTOUCHED: ONCE's create matrix reads `:ssh_key_id`
   with the underscore from this map, and a renamed key reads as a key this
@@ -28,48 +30,6 @@
   (some-> (tofu/outputs (tools/tool-dir opts tools/infrastructure-tool)
                         (tools/backend-credential-env opts))
           :params walk/keywordize-keys))
-
-(defn read-state
-  "One read of the compute state per run, shaped so a caller can tell nothing
-  recorded from nothing readable: `{:params m}` where `m` may be nil, or
-  `{:error message}`. Needs backend credentials only."
-  [opts]
-  (try {:params (state-output opts)}
-       (catch Exception e {:error (ex-message e)})))
-
-(defn lifecycle-event?
-  "A real create or delete: the two events that touch a provider."
-  [{:keys [event real?]}]
-  (and real? (contains? #{:create :delete} event)))
-
-(defn provider-validator
-  "Compute Provider Standard §4 before the credentials. The recorded provider
-  is compared with the selected one first, so a mistaken provider edit reports
-  the actionable error — put it back and delete — rather than a missing token
-  for the provider that was just selected; validators aggregate, which is why
-  a mismatch pre-empts the secrets check rather than sitting beside it. On a
-  create an unreadable backend counts as no state (a fresh clone has none) and
-  the credentials are checked as usual; on a delete `adopt-state` refuses it
-  after validation."
-  [opts {:keys [event]} {:keys [params]}]
-  (let [mismatch (validate/provider-state-errors opts params)]
-    (if (seq mismatch) mismatch (validate/secret-errors opts event))))
-
-(defn adopt-state
-  "Events that run against the existing machine take its address from state
-  rather than from a fresh apply. A readable state without compute params
-  leaves :ip unset — a delete's cleanup step then skips itself, and rehearse
-  and describe refuse below — while an unreadable backend on a delete fails
-  loudly: swallowing it is how a live teardown elsewhere ended up converging
-  against 192.0.2.10 (§4)."
-  [opts event {:keys [params error]}]
-  (if error
-    (assoc opts :green/exit 1
-           :green/err (str "could not read the infrastructure state for "
-                           (if (= :delete event) "the delete cleanup" (name event)) ": " error "\n"
-                           "fix the backend credentials and retry; a " (name event)
-                           " that cannot see its state has nothing to address"))
-    (merge (ssh/with-machine-key opts) params {:green/exit 0})))
 
 (defn after-validate
   "The lifecycle transition table, once the validators have passed.
@@ -81,16 +41,17 @@
   unowned key on disk or at the provider stops the run while stopping is still
   free — then the `~/.ssh/config` ownership and placement checks. A real delete
   fills the same template values (a destroy renders before it destroys) and
-  adopts the machine address from the same read, fail-closed; it checks no
-  key, because its cleanup runs after the destroy. Rehearse and describe need
-  a machine in state and say so when there is none."
+  adopts the machine address from the same read through ONCE's `adopt-state`,
+  fail-closed; it checks no key, because its cleanup runs after the destroy.
+  Rehearse and describe adopt the same way, under their own event name, and
+  say so when there is no machine in state."
   [opts {:keys [event real?]} state]
   (cond
     (and real? (= :delete event))
-    (adopt-state opts event state)
+    (compute/adopt-state opts :delete state)
 
     (and real? (contains? #{:rehearse :describe} event))
-    (let [opts (adopt-state opts event state)]
+    (let [opts (compute/adopt-state opts event state)]
       (cond
         (wf/failed? opts) opts
         (not (:ip opts)) (assoc opts :green/exit 1
@@ -122,14 +83,22 @@
    ;; the after-validate share the one read.
    (let [overlaid (green-cli/read-pars (merge defaults opts) env)
          context {:event (:green/event overlaid) :real? (lifecycle/real-run? overlaid)}
-         state (when (state-event? context) (read-state overlaid))]
+         state (when (state-event? context)
+                 (compute/read-state overlaid state-output))]
      (lifecycle/preflight
       opts {:defaults defaults :overlay green-cli/read-pars
             :validators
             [(fn [_ env _] (validate/env-errors env))
              (fn [opts _ _] (validate/state-errors opts))
-             (fn [opts _ ctx]
-               (when (lifecycle-event? ctx) (provider-validator opts ctx state)))
+             ;; Standard §4 before the credentials: a recorded provider that
+             ;; differs from the selected one reports the actionable error, not
+             ;; a missing token for the provider that was just selected. The
+             ;; thunk carries the event, because a delete asks for the
+             ;; provider's credentials alone.
+             (fn [opts _ {:keys [event] :as ctx}]
+               (when (compute/lifecycle-event? ctx)
+                 (compute/provider-validator validate/spec opts (:params state)
+                                             #(validate/secret-errors opts event))))
              (fn [opts _ {:keys [event real?]}]
                (when (and real? (= :delete event) (:compute-prevent-destroy opts))
                  [(str "compute destruction is protected; set "

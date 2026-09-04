@@ -1,6 +1,7 @@
 (ns io.github.getcolors.redis.validate
   (:require [clojure.string :as str]
             [green.cli :as green-cli]
+            [io.github.getcolors.once.compute :as compute]
             [io.github.getcolors.once.ssh :as once-ssh]
             [io.github.getcolors.once.validate :as once-validate]))
 
@@ -38,6 +39,16 @@
   compute output must be running: the only one it ever offered."
   "vultr")
 
+(def spec
+  "How this package describes itself to ONCE's `compute`, the Compute Provider
+  Standard's operations over a package-owned registry. The registry and the
+  default are the data above; `:sources` names the firewall lists the
+  templates read — SSH must list at least one CIDR, and there is no HTTP list
+  at all, so `:may-be-empty` is empty. The name rules are ONCE's."
+  {:registry compute-providers
+   :default default-compute-provider
+   :sources {:non-empty ["ssh-sources"] :may-be-empty []}})
+
 (def required
   "Every key desired state must carry whichever provider is selected. The
   provider-scoped keys come from `compute-providers`. There is no
@@ -58,38 +69,20 @@
 (def image-re #"^[^\s:@]+(?:/[^\s:@]+)*(?::[^\s:@]+|@sha256:[0-9a-f]{64}|:[^\s:@]+@sha256:[0-9a-f]{64})$")
 (def url-re #"^https://[^\s]+$")
 
-(def name-rules
-  "What each provider accepts as a machine name, checked here rather than
-  discovered mid-apply. DigitalOcean droplet names are hostname-like; Vultr
-  labels are free-form console text, held to a safe subset."
-  {"digitalocean" {:re #"^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$"
-                   :message "must be a hostname-like name: lowercase letters, digits, dots and hyphens, 1-63 characters"}
-   "vultr" {:re #"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$"
-            :message "must be a safe 1-63 character name"}})
-
 (defn missing? [x] (or (nil? x) (and (string? x) (str/blank? x))))
 
-(defn placeholder?
-  "Whether the compute-name override is effectively absent (Compute Name
-  Standard §2: presence is the only switch)."
-  [v]
-  (or (missing? v) (= "REPLACE_ME" (str/trim (str v)))))
+(def compute-key
+  "`:<provider>-<suffix>`: desired state names compute keys after the
+  provider, so the shared steps reach them through the selected provider
+  rather than a fixed prefix. ONCE's; named here so `tools` reads the same."
+  compute/key)
 
-(defn compute-provider [opts] (get compute-providers (:provider-compute opts)))
-
-(defn compute-key
-  "Desired state names compute keys after the provider, so the shared steps
-  reach them through the selected provider rather than a fixed prefix."
-  [opts suffix]
-  (keyword (str (:provider-compute opts) "-" suffix)))
-
-(defn compute-name
-  "What this deployment calls its machine. The one function that answers it —
-  every label, including the firewall's, derives from this and never from the
-  raw override key or a second copy of the profile (§3)."
-  [opts]
-  (let [override (get opts (compute-key opts "name"))]
-    (if (placeholder? override) (str (:profile opts)) (str/trim (str override)))))
+(def compute-name
+  "What this deployment calls its machine: `<provider>-name` when present,
+  else the profile (Compute Name Standard). ONCE's; every label, including
+  the firewall's, derives from this one answer and never from the raw
+  override key or a second copy of the profile (§3)."
+  compute/name)
 
 (defn keygen?
   "Whether this deployment owns its machine keypair. Delegates to ONCE, the
@@ -97,78 +90,10 @@
   [opts]
   (once-ssh/keygen? opts))
 
-(defn cidrs
-  "A source list as desired state or an overlay string carries it: a YAML
-  list, or one string of comma- or space-separated entries."
-  [opts k]
-  (let [v (get opts k) xs (if (sequential? v) v (str/split (str v) #"[,\s]+"))]
-    (->> xs (map (comp str/trim str)) (remove str/blank?) vec)))
-
-;; Syntactic CIDR checks, deliberately not a resolver: an address library that
-;; accepts a hostname would let a firewall source depend on DNS at apply time.
-(def ^:private ipv4-re
-  #"^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$")
-(def ^:private hex-group-re #"^[0-9A-Fa-f]{1,4}$")
-
-(defn- ipv6-address? [s]
-  (let [groups (fn [part] (if (str/blank? part) [] (str/split part #":" -1)))]
-    (if (str/includes? s "::")
-      (let [halves (str/split s #"::" -1)]
-        (and (= 2 (count halves))
-             (let [gs (mapcat groups halves)]
-               (and (<= (count gs) 7) (every? #(re-matches hex-group-re %) gs)))))
-      (let [gs (groups s)]
-        (and (= 8 (count gs)) (every? #(re-matches hex-group-re %) gs))))))
-
-(defn cidr?
-  "Whether `s` is a syntactically valid IPv4 or IPv6 CIDR: an address, a
-  slash, and a prefix length the address family allows."
-  [s]
-  (let [[address prefix & more] (str/split (str s) #"/" -1)]
-    (and (nil? more) (some? prefix) (re-matches #"^\d{1,3}$" prefix)
-         (let [n (Long/parseLong prefix)]
-           (cond
-             (re-matches ipv4-re address) (<= 0 n 32)
-             (ipv6-address? address) (<= 0 n 128)
-             :else false)))))
-
-(defn source-errors
-  "The network contract (§5): the selected provider's SSH sources must name at
-  least one CIDR — a machine nobody can reach is not a deployment — and every
-  entry must be one. Refusing beats failing at apply time."
-  [opts]
-  (let [ssh-key (compute-key opts "ssh-sources")]
-    (concat
-     (when (and (not (missing? (get opts ssh-key))) (empty? (cidrs opts ssh-key)))
-       [(str ssh-key " must list at least one CIDR")])
-     (for [entry (when-not (missing? (get opts ssh-key)) (cidrs opts ssh-key))
-           :when (not (cidr? entry))]
-       (str ssh-key " entry " (pr-str entry) " is not an IPv4 or IPv6 CIDR")))))
-
-(defn provider-errors
-  "Checks that hold only for the selected provider. Keys of the other provider
-  are ignored, never refused."
-  [opts]
-  (let [name-key (compute-key opts "name")
-        {:keys [re message]} (get name-rules (:provider-compute opts))
-        name (str/trim (str (get opts name-key)))]
-    (concat
-     (when (and re (not (placeholder? (get opts name-key)))
-                (or (> (count name) 63) (not (re-matches re name))))
-       [(str name-key " " message)])
-     (case (:provider-compute opts)
-       "vultr"
-       (when-not (or (missing? (:vultr-os-id opts)) (integer? (:vultr-os-id opts)))
-         [":vultr-os-id must be Vultr's numeric operating-system id"])
-       "digitalocean"
-       (concat
-        ;; No VPC is created: the region's default is discovered at plan time,
-        ;; and a pinned UUID or a CIDR would make this package start owning one.
-        (when (contains? opts :digitalocean-vpc-uuid)
-          [":digitalocean-vpc-uuid must be absent; the default regional VPC is discovered at runtime"])
-        (when (contains? opts :digitalocean-vpc-cidr)
-          [":digitalocean-vpc-cidr must be absent; this package must not create a VPC"]))
-       nil))))
+(def cidrs
+  "A source list as desired state or an overlay string carries it. ONCE's, so
+  the validator and the templates can never disagree about what an entry is."
+  compute/cidrs)
 
 (defn env-errors [env]
   (when (not-empty (str (get env profile-par)))
@@ -176,15 +101,17 @@
 
 (defn- positive-int? [v] (and (integer? v) (pos? v)))
 
-(defn state-errors [opts]
+(defn state-errors
+  "Every problem with desired state at once: the missing keys (this package's
+  and the selected provider's), the package's own checks, then the Compute
+  Provider Standard's — selection, the network contract and the provider
+  rules — which are ONCE's over `spec`."
+  [opts]
   (vec
    (concat
-    (for [k (concat required (:required (compute-provider opts)))
+    (for [k (concat required (compute/required-keys spec opts))
           :when (missing? (get opts k))]
       (str k " is required"))
-    (when-not (compute-provider opts)
-      [(str ":provider-compute must be one of "
-            (str/join ", " (sort (keys compute-providers))))])
     (when-not (contains? #{"local" "s3" "r2"} (:provider-backend opts))
       [":provider-backend must be local, s3, or r2"])
     (when-not (boolean? (:compute-prevent-destroy opts))
@@ -205,45 +132,11 @@
           :let [v (get opts k)]
           :when (and (not (missing? v)) (not (positive-int? v)))]
       (str k " must be a positive integer"))
-    (when (compute-provider opts)
-      (concat (provider-errors opts) (source-errors opts))))))
-
-(defn provider-state-errors
-  "Provider switching is a rebuild, never an apply (§4). Every provider shares
-  one state key, so a changed provider-compute on a profile whose state already
-  holds compute would plan a cross-provider replacement — and a delete would
-  render and destroy the *selected* provider's template against the wrong
-  lifecycle. `params` is the compute stage's recorded output, or nil when the
-  state holds none; its `provider` is the registry name the template that
-  produced it belongs to. A recorded output without one predates this package
-  recording it, which makes it the default provider's."
-  [opts params]
-  (let [selected (:provider-compute opts)
-        recorded (some-> (:provider params) str not-empty)]
-    (cond
-      (nil? params) nil
-
-      (and recorded (not= recorded selected))
-      [(str "state holds a " recorded " machine; set provider-compute back to "
-            recorded " and delete first")]
-
-      (and (nil? recorded) (not= selected default-compute-provider))
-      [(str "state holds a machine with no recorded provider, created before this "
-            "package recorded one, which makes it a " default-compute-provider
-            " machine; set provider-compute back to " default-compute-provider
-            " and delete first")]
-
-      :else nil)))
+    (compute/state-errors spec opts))))
 
 (defn backend-secrets [opts]
   (:secrets (get-in once-validate/providers
                     [:provider-backend (:provider-backend opts)])))
-
-(defn provider-secrets
-  "What talking to the selected provider needs, on any real event. Derived
-  from the registry entry alone, never from a second list kept beside it."
-  [opts]
-  (:secrets (compute-provider opts)))
 
 (def application-secrets
   "What converging the machine needs, and therefore only a create: the R2
@@ -252,10 +145,12 @@
   [:redis-backup-r2-access-key-id :redis-backup-r2-secret-access-key])
 
 (defn secret-errors
-  "Credentials a real event needs. A delete tears down infrastructure and never
-  converges anything, so it asks for the provider credentials only."
+  "Credentials a real event needs. The provider's come from the registry entry
+  alone, through ONCE, never from a second list kept beside it. A delete tears
+  down infrastructure and never converges anything, so it asks for the
+  provider credentials only."
   [opts event]
-  (let [keys (concat (provider-secrets opts)
+  (let [keys (concat (compute/secrets spec opts)
                      (when (= :create event) application-secrets)
                      (backend-secrets opts))]
     (for [k (distinct keys) :when (missing? (get opts k))]
@@ -263,7 +158,7 @@
 
 (defn tofu-env [opts slot]
   (case slot
-    :provider-compute (:tofu-env (compute-provider opts) {})
+    :provider-compute (compute/tofu-env spec opts)
     :provider-backend (:tofu-env (get-in once-validate/providers
                                          [:provider-backend (:provider-backend opts)]) {})
     {}))

@@ -32,6 +32,20 @@ protocol and Redis pieces from `../langfuse`.
   looking at credentials. A provider without a fixture and a golden per
   keypair mode is not advertised. Vultr is the default and what a legacy
   state without `params.provider` is taken to be.
+- **The standard's operations are ONCE's; the data and the wiring are here.**
+  `validate/spec` hands the registry, the default and the sources map
+  (`ssh-sources` must list a CIDR; there is no HTTP list) to
+  `io.github.getcolors.once.compute`, which owns the CIDR grammar, the
+  selection, source and provider checks, the §4 switch and legacy refusals,
+  the state read, the missing-`ip` refusal and state adoption. `validate`,
+  `tools` and `workflow` keep the registry, the template lookup,
+  `state-output`, `start-step`, `after-validate`, and thin aliases
+  (`compute-key`, `compute-name`, `cidrs`, `fallback-params`,
+  `resolved-compute`, `output-params`) so callers read as before. The
+  behaviour matrix is tested once, in ONCE, in all three colours; the tests
+  here cover the wiring — the switch refusal through `start-step`, the
+  unreadable backend on create versus delete, the adopted address — and
+  assert the literal spec, so a drifted registry fails in this package.
 - **Docker's published ports bypass ufw.** The Vultr image ships ufw enabled
   with 22 alone, the DigitalOcean one ships none; the provider firewall (22
   only) and the loopback binding are the load-bearing layers, and the
@@ -63,11 +77,14 @@ protocol and Redis pieces from `../langfuse`.
   matrix reads it from the map `state-fn` returns; renaming it makes the
   deployment's own key read as foreign and the never-adopt rule refuses it.
 - **The state is read once, up front, and two events treat an unreadable
-  backend differently.** `read-state` returns `{:params m}` or `{:error e}`;
-  a real create treats an error as no state (a fresh clone has none), a real
-  delete, rehearse or describe fails on it rather than proceeding against
-  nothing. A real converge whose compute output carries no `ip` is refused
-  instead of converging against `192.0.2.10`.
+  backend differently.** ONCE's `compute/read-state`, over the local
+  `state-output`, returns `{:params m}` or `{:error e}` — and only the SDK's
+  step error (an `ex-info` carrying `:dir`, what `green.tofu/outputs` throws)
+  counts as unreadable; anything else propagates as a defect. A real create
+  treats an error as no state (a fresh clone has none), a real delete,
+  rehearse or describe fails on it rather than proceeding against nothing. A
+  real converge whose compute output carries no `ip` is refused instead of
+  converging against `192.0.2.10`.
 
 ## Verbs beyond the lifecycle
 
@@ -112,7 +129,10 @@ must not touch `~/.ssh`.
 
 ## Coupling
 
-`deps.edn` pins Green and ONCE (never below `bc06f2f`). Use `GREEN_LIB_ROOT`,
+`deps.edn` pins Green and ONCE. The ONCE pin can never go below `eea43c2`,
+the first ONCE whose `compute` namespace — which this package's validation
+and lifecycle wiring require — words every message identically in all three
+colours; `bc06f2f`, the keypair floor, sits below it. Use `GREEN_LIB_ROOT`,
 `ONCE_LIB_ROOT` and `REDIS_LIB_ROOT` for working-tree development. `bb pin`
 stamps the payload from a clean pushed HEAD; deployment launchers are copies,
 not symlinks.

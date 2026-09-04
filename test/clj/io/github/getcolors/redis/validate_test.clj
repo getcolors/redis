@@ -21,6 +21,28 @@
   (doseq [f [fixture optout do-fixture do-optout]]
     (is (= [] (validate/state-errors (f))))))
 
+;; --- the spec handed to ONCE
+
+(deftest the-spec-carries-this-packages-registry-sources-and-default
+  ;; The operations are ONCE's; this is the data they run over. A registry,
+  ;; sources map or default that drifts fails here, literally.
+  (is (= #{"digitalocean" "vultr"} (set (keys (:registry validate/spec)))))
+  (is (= validate/compute-providers (:registry validate/spec)))
+  (is (= {:required [:digitalocean-region :digitalocean-size :digitalocean-image
+                     :digitalocean-ssh-sources]
+          :secrets [:do-token]
+          :tofu-env {:do-token "DIGITALOCEAN_TOKEN"}}
+         (get-in validate/spec [:registry "digitalocean"])))
+  (is (= {:required [:vultr-region :vultr-plan :vultr-os-id :vultr-ssh-sources]
+          :secrets [:vultr-api-key]
+          :tofu-env {:vultr-api-key "VULTR_API_KEY"}}
+         (get-in validate/spec [:registry "vultr"])))
+  ;; No HTTP list: nothing in this package speaks HTTP, so only SSH is a source.
+  (is (= {:non-empty ["ssh-sources"] :may-be-empty []} (:sources validate/spec)))
+  (is (= "vultr" (:default validate/spec)))
+  (is (= validate/default-compute-provider (:default validate/spec)))
+  (is (not (contains? validate/spec :name-rules)) "the name rules are ONCE's"))
+
 (deftest machine-key-is-not-required
   ;; The standard makes absence meaningful: requiring <provider>-ssh-keys
   ;; would make every conforming deployment invalid.
@@ -45,12 +67,6 @@
   (is (= "redis-digitalocean-fixture" (validate/compute-name (do-fixture :vultr-name "custom")))
       "the other provider's name key is ignored"))
 
-(deftest names-are-checked-against-the-selected-provider
-  (is (seq (validate/state-errors (do-fixture :digitalocean-name "Not_A_Hostname"))))
-  (is (= [] (validate/state-errors (do-fixture :digitalocean-name "redis-a.b"))))
-  (is (seq (validate/state-errors (fixture :vultr-name "has space"))))
-  (is (= [] (validate/state-errors (fixture :vultr-name "Redis_1")))))
-
 ;; --- the registry (Compute Provider Standard §2)
 
 (deftest an-unadvertised-provider-is-refused-with-the-sorted-list
@@ -70,15 +86,6 @@
     (is (= [] (validate/state-errors (fixture :digitalocean-region "ams3" :digitalocean-size "s-1vcpu-2gb"))))
     (is (= [] (validate/state-errors (do-fixture :vultr-os-id "not-a-number" :vultr-vpc-subnet "x"))))))
 
-(deftest provider-specific-checks-run-only-when-selected
-  (is (some #(str/includes? % "os-id") (validate/state-errors (fixture :vultr-os-id "2284"))))
-  (is (= [] (validate/state-errors (do-fixture :vultr-os-id "2284"))))
-  (testing "DigitalOcean must not own a VPC"
-    (let [errors (validate/state-errors (do-fixture :digitalocean-vpc-uuid "u" :digitalocean-vpc-cidr "10.0.0.0/16"))]
-      (is (some #(str/includes? % "digitalocean-vpc-uuid must be absent") errors))
-      (is (some #(str/includes? % "digitalocean-vpc-cidr must be absent") errors)))
-    (is (= [] (validate/state-errors (fixture :digitalocean-vpc-uuid "u"))) "ignored on Vultr")))
-
 (deftest no-vpc-key-exists-any-more
   ;; The VPC binding is gone: a single-node package creates no private network,
   ;; and the old key is neither required nor validated.
@@ -88,20 +95,15 @@
 ;; --- the network contract (§5)
 
 (deftest ssh-sources-must-be-cidrs
+  ;; The wiring of ONCE's network contract over this package's `spec`: the
+  ;; selected provider's SSH list is the one that must not be empty, and its
+  ;; entries are the ones checked. The CIDR grammar itself is ONCE's matrix.
   (doseq [[f k] [[fixture :vultr-ssh-sources] [do-fixture :digitalocean-ssh-sources]]]
     (testing (str k)
       (is (some #(str/includes? % "must list at least one CIDR") (validate/state-errors (f k []))))
       (is (some #(str/includes? % "is required") (validate/state-errors (f k ""))) "a blank value is a missing key")
-      (let [errors (validate/state-errors (f k ["0.0.0.0/0" "example.com" "10.0.0.0/33" "::/129"]))]
-        (is (= 3 (count (filter #(str/includes? % "is not an IPv4 or IPv6 CIDR") errors))) (pr-str errors)))
-      (is (= [] (validate/state-errors (f k "203.0.113.0/24, 2001:db8::/32"))) "an overlay string parses")
-      (is (= [] (validate/state-errors (f k ["0.0.0.0/0" "::/0" "203.0.113.7/32"])))))))
-
-(deftest cidr-syntax
-  (doseq [ok ["0.0.0.0/0" "::/0" "203.0.113.7/32" "2001:db8::1/128" "fe80::/10" "10.0.0.0/8"]]
-    (is (validate/cidr? ok) ok))
-  (doseq [bad ["203.0.113.7" "256.0.0.0/8" "10.0.0.0/33" "example.com/24" "::/129" "1:2:3:4:5:6:7:8:9/64" "" "/24"]]
-    (is (not (validate/cidr? bad)) bad)))
+      (is (some #(str/includes? % "is not an IPv4 or IPv6 CIDR") (validate/state-errors (f k ["example.com"]))))
+      (is (= [] (validate/state-errors (f k "203.0.113.0/24, 2001:db8::/32"))) "an overlay string parses"))))
 
 (deftest reports-all-errors
   (let [errors (validate/state-errors
@@ -167,23 +169,3 @@
   (is (= {} (validate/tofu-env (fixture :provider-compute "hcloud") :provider-compute)))
   (is (= {:r2-access-key-id "AWS_ACCESS_KEY_ID" :r2-secret-access-key "AWS_SECRET_ACCESS_KEY"}
          (validate/tofu-env (fixture :provider-backend "r2") :provider-backend))))
-
-;; --- provider switching is a rebuild, never an apply (§4)
-
-(deftest provider-state-errors-decide-a-switch
-  (testing "no state: nothing to compare"
-    (is (nil? (validate/provider-state-errors (fixture) nil)))
-    (is (nil? (validate/provider-state-errors (do-fixture) nil))))
-  (testing "the recorded provider matches"
-    (is (nil? (validate/provider-state-errors (fixture) {:provider "vultr" :ip "203.0.113.9"})))
-    (is (nil? (validate/provider-state-errors (do-fixture) {:provider "digitalocean" :ip "203.0.113.9"}))))
-  (testing "the recorded provider differs"
-    (is (= ["state holds a digitalocean machine; set provider-compute back to digitalocean and delete first"]
-           (validate/provider-state-errors (fixture) {:provider "digitalocean" :ip "203.0.113.9"})))
-    (is (= ["state holds a vultr machine; set provider-compute back to vultr and delete first"]
-           (validate/provider-state-errors (do-fixture) {:provider "vultr" :ip "203.0.113.9"}))))
-  (testing "a legacy state without a provider is the default provider's"
-    (is (nil? (validate/provider-state-errors (fixture) {:ip "203.0.113.9"})))
-    (let [[e] (validate/provider-state-errors (do-fixture) {:ip "203.0.113.9"})]
-      (is (str/includes? e "no recorded provider"))
-      (is (str/includes? e "set provider-compute back to vultr and delete first")))))

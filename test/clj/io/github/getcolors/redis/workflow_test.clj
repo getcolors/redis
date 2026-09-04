@@ -17,7 +17,9 @@
     (workflow/start-step opts {})))
 
 (defn- start-unreadable [opts]
-  (with-redefs [workflow/state-output (fn [_] (throw (ex-info "tofu output failed: no backend" {})))]
+  ;; The shape `green.tofu/outputs` throws: an ex-info carrying `:dir`. Only
+  ;; that is an unreadable backend; anything else propagates as a defect.
+  (with-redefs [workflow/state-output (fn [_] (throw (ex-info "tofu output failed: no backend" {:dir "x"})))]
     (workflow/start-step opts {})))
 
 (def credentials
