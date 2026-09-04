@@ -124,10 +124,12 @@
 
 (deftest a-real-create-on-a-fresh-work-directory-reports-the-credentials-not-a-crash
   ;; A fresh clone has no `.colors/` yet, so the real state reader runs
-  ;; `tofu output` in a stage directory that does not exist and the SDK's
-  ;; shell raises a raw IOException. That is an unreadable state on a create
-  ;; — no state at all — and the run must reach the credentials check, not
-  ;; die on the exception. No stub: the real `state-output` runs.
+  ;; `tofu output` in a stage directory that does not exist; the green SDK
+  ;; reports that launch failure as exit 127 and `green.tofu/outputs` throws
+  ;; its step error, which ONCE's `read-state` alone counts as unreadable.
+  ;; That is an unreadable state on a create — no state at all — and the run
+  ;; must reach the credentials check, not die on an exception. No stub: the
+  ;; real `state-output` runs, through the SDK's own translation.
   (let [workdir (str (java.nio.file.Files/createTempDirectory
                       "redis-fresh" (into-array java.nio.file.attribute.FileAttribute []))
                      "/.colors")

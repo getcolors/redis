@@ -1,16 +1,18 @@
 {:paths ["src/clj" "src/resources"]
  :deps {org.clojure/clojure       {:mvn/version "1.12.5"}
         io.github.getcolors/green {:git/url "https://github.com/getcolors/green.git"
-                                   :git/sha "ceb4159a19ec281d60f10d11295c05c5de5f1c42"}
-        ;; 04f9623 is the first ONCE whose `compute` — the Compute Provider
-        ;; Standard's operations this package delegates to — survives a real
-        ;; create on a fresh work directory: its `read-state` treats the SDK's
-        ;; launch failure (no stage directory yet) as an unreadable state
-        ;; rather than crashing (417d5f7 introduced the namespace); bc06f2f,
-        ;; below it, is where ONCE moved the machine keypair into the
-        ;; operator's ~/.ssh. The pin cannot go below either.
+                                   :git/sha "3f33f5d4dcce1f8d97a11b6972e13eb3f0b37654"}
+        ;; 38e3cd6 is the first ONCE whose `compute` — the Compute Provider
+        ;; Standard's operations this package delegates to — trusts the SDK's
+        ;; step error alone in `read-state`: it needs green 3f33f5d, which
+        ;; reports a tofu launch failure (no stage directory yet on a fresh
+        ;; work directory, no binary) as exit 127 and so as that step error,
+        ;; the way red and blue always did. The two pins move together or a
+        ;; fresh-clone create crashes (417d5f7 introduced the namespace);
+        ;; bc06f2f, below it, is where ONCE moved the machine keypair into
+        ;; the operator's ~/.ssh. The pin cannot go below either.
         io.github.getcolors/once  {:git/url "https://github.com/getcolors/once.git"
-                                   :git/sha "04f9623159358882f6407618f804f70ce7067e54"
+                                   :git/sha "38e3cd66674a32fb96605e1b17ae6791086ad5c1"
                                    :deps/root "green"}}
  :aliases {:dev {:extra-paths ["test/clj" "test/resources"]}
            :test {:extra-paths ["test/clj" "test/resources"]
