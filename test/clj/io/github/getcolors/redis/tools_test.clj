@@ -89,3 +89,10 @@
   (let [[_ _ script] (tools/closed-port-args "203.0.113.5" 6379)]
     (is (str/includes? script "timeout 5"))
     (is (str/includes? script "/dev/tcp/203.0.113.5/6379"))))
+
+(deftest local-play-receives-its-required-node-fields
+  (with-redefs [green.ansible/ansible-with-spec
+                (fn [opts config _]
+                  (is (= [{:name "redis-fixture" :ip "192.0.2.10" :user "root"}]
+                         (get-in config [:extra-vars :ssh_hosts]))) opts)]
+    (tools/ansible-local-step (fixture :green/event :build))))

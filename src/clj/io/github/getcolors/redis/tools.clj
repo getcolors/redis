@@ -112,7 +112,7 @@
       {:dir dir :inventory "inventory.ini"
        :playbooks {:create "main.yml" :delete "main.yml"}
        :extra-vars {:host_alias (ssh-config/host-alias opts)
-                    :ssh_hosts [(select-keys (assoc (compute/node opts) :alias (ssh-config/host-alias opts)) [:alias :ip :user])]
+                    :ssh_hosts [(select-keys (assoc (compute/node opts) :name (ssh-config/host-alias opts)) [:name :ip :user])]
                     :block_state (if delete? "absent" "present")}}
       (ansible-local-specs opts))))
 

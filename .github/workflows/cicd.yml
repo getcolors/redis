@@ -10,6 +10,9 @@ jobs:
       - uses: DeLaGuardo/setup-clojure@13.4
         with:
           bb: latest
+      - uses: astral-sh/setup-uv@v6
       - run: bb test
       - run: bb golden
       - run: ./scripts/launcher.sh
+      - run: uv run --with ansible-core python scripts/ssh-config-probe.py
+      - run: uv run --with ansible-core bash scripts/syntax.sh
