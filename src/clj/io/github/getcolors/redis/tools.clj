@@ -72,7 +72,7 @@
 
 (defn load-infrastructure-step [opts]
   (try
-    (let [result (inspection/read-deployment opts nil nil (compute/requirements opts))]
+    (let [result (inspection/read-deployment opts (into {} (System/getenv)) {} (compute/requirements opts))]
       (case (:status result)
         "present" (let [node (first (get-in result [:cluster :nodes]))]
                     (cond-> (assoc opts :colors-compute/cluster (:cluster result)

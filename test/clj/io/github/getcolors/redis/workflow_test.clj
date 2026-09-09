@@ -14,7 +14,7 @@
 (deftest failures-refuse-application-inventory
  (with-redefs [orchestration/orchestrate (fn [& _] {:status "error"})]
   (is (= 1 (:green/exit (tools/infrastructure-step (fixture :green/event :create))))))
- (with-redefs [inspection/read-deployment (fn [& _] {:status "error"})]
+ (with-redefs [inspection/read-deployment (fn [_ env deps _] (is (map? env)) (is (contains? env "HOME")) (is (= {} deps)) {:status "error"})]
   (is (= 1 (:green/exit (tools/load-infrastructure-step (fixture :green/event :delete))))))
  (is (thrown? Exception (compute/node (fixture :green/event :create)))))
 (deftest inspection-preserves-connection-user-and-identity
