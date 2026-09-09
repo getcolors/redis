@@ -23,29 +23,15 @@ protocol and Redis pieces from `../langfuse`.
   binding any more: the VPC and its `{{ vpc_ip }}` were dropped when the
   package adopted the Compute Provider Standard, because a single-node
   package creates no private network and nothing ever used it.
-- **Two providers, one registry.** `validate/compute-providers` is the
-  Compute Provider Standard's registry (`../workspace/standards/
-  compute-provider.md`): required keys, secrets and the OpenTofu environment
-  derive from the selected entry alone; the template comes from
-  `tools/infrastructure/<provider>/`; `params.provider` records which one
-  produced the state, and a real create or delete refuses a mismatch before
-  looking at credentials. A provider without a fixture and a golden per
-  keypair mode is not advertised. Vultr is the default and what a legacy
-  state without `params.provider` is taken to be.
-- **The standard's operations are ONCE's; the data and the wiring are here.**
-  `validate/spec` hands the registry, the default and the sources map
-  (`ssh-sources` must list a CIDR; there is no HTTP list) to
-  `io.github.getcolors.once.compute`, which owns the CIDR grammar, the
-  selection, source and provider checks, the §4 switch and legacy refusals,
-  the state read, the missing-`ip` refusal and state adoption. `validate`,
-  `tools` and `workflow` keep the registry, the template lookup,
-  `state-output`, `start-step`, `after-validate`, and thin aliases
-  (`compute-key`, `compute-name`, `cidrs`, `fallback-params`,
-  `resolved-compute`, `output-params`) so callers read as before. The
-  behaviour matrix is tested once, in ONCE, in all three colours; the tests
-  here cover the wiring — the switch refusal through `start-step`, the
-  unreadable backend on create versus delete, the adopted address — and
-  assert the literal spec, so a drifted registry fails in this package.
+- **colors-compute owns compute.** The package requests one public host and
+  an SSH-only firewall through `redis.compute`. Provider recipes, credentials,
+  network selection, remote S3/R2 state, ownership coordination and SSH key
+  lifecycle come from the pinned library. Do not add a package provider
+  registry or compute templates. Vultr remains the default.
+- **Owned state is required.** The library refuses legacy monolithic state,
+  conflicting providers and unreadable state. A failed state read never means
+  absence. Delete, rehearse and describe inspect the recorded normalized node
+  before running application work. Real inventories never use build addresses.
 - **Docker's published ports bypass ufw.** The Vultr image ships ufw enabled
   with 22 alone, the DigitalOcean one ships none; the provider firewall (22
   only) and the loopback binding are the load-bearing layers, and the
@@ -73,23 +59,6 @@ protocol and Redis pieces from `../langfuse`.
 - **Ansible splits shell blocks before running them**, counting quotes across
   comments. Quoting-heavy shell lives in the installed scripts; `bb syntax`
   reproduces every load-time failure offline in a second.
-- **`state-output` keeps `:ssh_key_id` with the underscore.** ONCE's create
-  matrix reads it from the map `state-fn` returns; renaming it makes the
-  deployment's own key read as foreign and the never-adopt rule refuses it.
-- **The state is read once, up front, and two events treat an unreadable
-  backend differently.** ONCE's `compute/read-state`, over the local
-  `state-output`, returns `{:params m}` or `{:error e}` — and only the SDK's
-  step error (an `ex-info` carrying `:dir`, what `green.tofu/outputs` throws)
-  counts as unreadable; anything else propagates as a defect. A launch
-  failure — the stage directory does not exist yet on a fresh work
-  directory, or there is no `tofu` binary — is that step error too, because
-  the green SDK reports it as exit 127 rather than a raw
-  `java.io.IOException`. A real create
-  treats an error as no state (a fresh clone has none), a real delete,
-  rehearse or describe fails on it rather than proceeding against nothing. A
-  real converge whose compute output carries no `ip` is refused instead of
-  converging against `192.0.2.10`.
-
 ## Verbs beyond the lifecycle
 
 `rehearse` takes a fresh set, restores the newest completed one into a
@@ -104,7 +73,7 @@ Born conforming to three workspace standards. Read
 `../workspace/standards/ssh-config.md` before touching `ssh_config.clj`, and
 `../workspace/standards/compute-name.md` for why there is no required
 `<provider>-name`, and `../workspace/standards/compute-provider.md` before
-touching the registry, the template directories, or the state read. Build and
+changing the compute request or state inspection. Build and
 dry-run render `/home/build-placeholder/.ssh/<profile>` rather than reading
 `~/.ssh`.
 
@@ -133,16 +102,11 @@ must not touch `~/.ssh`.
 
 ## Coupling
 
-`deps.edn` pins Green and ONCE. The ONCE pin can never go below `38e3cd6`,
-the first ONCE whose `compute` namespace — which this package's validation
-and lifecycle wiring require — trusts the SDK's step error alone when it
-reads the state; it needs the Green pin at `3f33f5d` or above, the first
-Green that reports a tofu launch failure on a fresh work directory as that
-step error, so the two pins move together or a fresh-clone create crashes;
-`bc06f2f`, the keypair floor, sits below it. Use `GREEN_LIB_ROOT`,
-`ONCE_LIB_ROOT` and `REDIS_LIB_ROOT` for working-tree development. `bb pin`
-stamps the payload from a clean pushed HEAD; deployment launchers are copies,
-not symlinks.
+`deps.edn` pins Green and colors-compute. Provider support changes belong in
+colors-compute and reach Redis through a library version bump. Use
+`GREEN_LIB_ROOT`, `COLORS_COMPUTE_LIB_ROOT` and `REDIS_LIB_ROOT` for development.
+`bb pin` stamps the payload from a clean pushed HEAD; deployment launchers are
+copies, not symlinks.
 
 ## Documentation
 

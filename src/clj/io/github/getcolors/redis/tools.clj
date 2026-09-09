@@ -1,13 +1,16 @@
 (ns io.github.getcolors.redis.tools
   (:require [cheshire.core :as json]
             [clojure.string :as str]
+            [clojure.java.io :as io]
             [green.ansible :as ansible]
             [green.cli :as green-cli]
             [green.process :as process]
             [green.scaffold :as sc]
-            [green.tofu :as tofu]
-            [green.workflow :as wf]
-            [io.github.getcolors.once.compute :as compute]
+                        [green.workflow :as wf]
+            [io.github.getcolors.redis.compute :as compute]
+            [io.github.getcolors.compute-orchestration :as orchestration]
+            [io.github.getcolors.compute-inspection :as inspection]
+            [io.github.getcolors.compute-planning :as planning]
             [io.github.getcolors.redis.ssh-config :as ssh-config]
             [io.github.getcolors.redis.validate :as validate]))
 
@@ -22,78 +25,58 @@
 (defn spec [source target data] {:template source :target target :data data :opts template-opts})
 (defn raw-spec [target content] (sc/content-spec target content))
 
-(def cidrs
-  "The source lists as validate parses them, so the template and the
-  validator can never disagree about what an entry is."
-  validate/cidrs)
-
-(defn credential-env [opts & slots]
-  (not-empty
-   (into {} (keep (fn [[k env-var]]
-                    (when-let [v (not-empty (str (get opts k)))] [env-var v])))
-         (apply merge (map #(validate/tofu-env opts %) (conj (vec slots) :provider-backend))))))
-(defn backend-credential-env [opts] (credential-env opts))
-
-;; The placeholder address for a build: a documentation range, so a rendered
-;; tree can never point at a real machine.
 (def placeholder-ip "192.0.2.10")
 
-(def fallback-params
-  "What `build` and `--dry-run` render in place of a compute output: the
-  documentation address, shaped like the selected provider's real `params` so
-  every later stage sees the same keys either way. Both advertised providers
-  log in as root. ONCE's."
-  compute/fallback-params)
-
-(def output-params
-  "The compute stage's `params`, keywordized but otherwise UNTOUCHED: ONCE's
-  create matrix reads `:ssh_key_id` with the underscore from this map, and a
-  renamed key reads as a key this deployment does not own. ONCE's."
-  compute/output-params)
-
-(def resolved-compute
-  "Refuse to hand 192.0.2.10 to Ansible on a real converge whose compute
-  output carries no `ip` (Compute Provider Standard §4). ONCE's;
-  `infrastructure-step` is what wires it."
-  compute/resolved-compute)
-
-;; Every backup set lives under `<profile>/redis/<stamp>/` in the backup
-;; bucket; the recovery marker sits at `<profile>/.colors-recovery-verified`
-;; beside it. One bucket can therefore carry several deployments, and the
-;; OpenTofu state for this one (`<profile>/<stage>.tfstate`, usually in a
-;; different bucket) never collides with either key space.
 (defn set-prefix [opts] (str (:profile opts) "/redis"))
 
 ;; ---------------------------------------------------------------- compute
 
-(defn infrastructure-data
-  "Template values for the compute stage. The name and the source list are
-  resolved here once, so a template interpolates values and never branches on
-  which provider it belongs to."
-  [opts]
-  (assoc opts
-         :compute-name (validate/compute-name opts)
-         :ssh-keygen (validate/keygen? opts)
-         :ssh-sources-hcl (tofu/hcl-list (cidrs opts (validate/compute-key opts "ssh-sources")))))
-
-(defn infrastructure-template
-  "Providers are selected by template directory, `infrastructure/<provider>/`,
-  not by conditionals inside one file (Compute Provider Standard §3); the
-  rendered target is the same `main.tf` whichever directory it came from."
-  [opts]
-  (template (str "infrastructure." (:provider-compute opts)) "main.tf"))
+(defn- compute-json [value indent]
+  (let [padding #(apply str (repeat % " "))]
+    (cond
+      (map? value) (if (empty? value) "{}"
+                      (str "{\n" (str/join ",\n" (for [[key item] (sort-by key value)]
+                                                       (str (padding (+ indent 2)) (json/generate-string key) ": " (compute-json item (+ indent 2)))))
+                           "\n" (padding indent) "}"))
+      (sequential? value) (if (empty? value) "[]"
+                              (str "[\n" (str/join ",\n" (map #(str (padding (+ indent 2)) (compute-json % (+ indent 2))) value)) "\n" (padding indent) "]"))
+      :else (json/generate-string value))))
 
 (defn infrastructure-step [opts]
-  (let [dir (tool-dir opts infrastructure-tool)
-        specs [(spec (infrastructure-template opts) (str dir "/main.tf")
-                     (infrastructure-data opts))]
-        result (tofu/tofu-with-spec opts specs
-                                    {:dir dir :env (credential-env opts :provider-compute)})]
-    (cond
-      (wf/failed? result) result
-      (= :build (:green/event opts)) (merge result (fallback-params opts))
-      (= :delete (:green/event opts)) result
-      :else (resolved-compute result (fallback-params opts) (output-params result)))))
+  (try
+    (let [planning? (or (= :build (:green/event opts)) (:green/dry-run opts))
+          result (if planning?
+                   (planning/plan-deployment opts (compute/topology opts) (compute/requirements opts))
+                   (orchestration/orchestrate opts (compute/topology opts) (compute/requirements opts)))]
+      (when planning?
+        (doseq [[stage documents] (cons ["shared" (get-in result [:documents :shared])]
+                                      (map (fn [[id documents]] [(str "nodes/" id) documents]) (get-in result [:documents :nodes])))
+                [filename document] documents]
+          (let [target (io/file (tool-dir opts infrastructure-tool) stage filename)]
+            (io/make-parents target)
+            (spit target (str (compute-json document 0) "\n")))))
+      (if-not (contains? #{"ready" "planned" "destroyed"} (:status result))
+        (assoc opts :green/exit 1 :green/err (if (seq (:errors result)) (str/join "\n" (:errors result)) "compute lifecycle refused; inspect state ownership and configuration"))
+        (cond-> (assoc opts :green/exit 0)
+          (:shared result) (assoc :colors-compute/shared (:shared result))
+          (:cluster result) (assoc :colors-compute/cluster (:cluster result) :ip (get-in result [:cluster :nodes 0 :ip]) :user (get-in result [:cluster :nodes 0 :user]))
+          (get-in result [:key :private_key_path])
+          (assoc :ssh-private-key-path (if planning? (str/replace (get-in result [:key :private_key_path]) "$HOME/.ssh" "/home/build-placeholder/.ssh") (get-in result [:key :private_key_path]))))))
+    (catch Exception _ (assoc opts :green/exit 1 :green/err "compute lifecycle refused; legacy monolithic state requires explicit migration"))))
+
+(defn load-infrastructure-step [opts]
+  (try
+    (let [result (inspection/read-deployment opts nil nil (compute/requirements opts))]
+      (case (:status result)
+        "present" (let [node (first (get-in result [:cluster :nodes]))]
+                    (cond-> (assoc opts :colors-compute/cluster (:cluster result)
+                                       :colors-compute/shared (:shared result)
+                                       :ip (:ip node) :user (:user node) :green/exit 0)
+                      (:ssh_identity_file node) (assoc :ssh-private-key-path (:ssh_identity_file node))))
+        "destroyed" (if (= :delete (:green/event opts)) (assoc opts :redis/already-destroyed true :green/exit 0)
+                        (assoc opts :green/exit 1 :green/err "compute deployment is destroyed"))
+        (assoc opts :green/exit 1 :green/err "compute inspection refused; existing owned state is required")))
+    (catch Exception _ (assoc opts :green/exit 1 :green/err "compute inspection refused; existing owned state is required"))))
 
 ;; ---------------------------------------------------------- ansible (local)
 
@@ -123,22 +106,18 @@
       {:dir dir :inventory "inventory.ini"
        :playbooks {:create "main.yml" :delete "main.yml"}
        :extra-vars {:host_alias (ssh-config/host-alias opts)
-                    :ip (or (:ip opts) placeholder-ip)
-                    :user (or (:user opts) "root")
+                    :ssh_hosts [(select-keys (assoc (compute/node opts) :alias (ssh-config/host-alias opts)) [:alias :ip :user])]
                     :block_state (if delete? "absent" "present")}}
       (ansible-local-specs opts))))
 
 ;; ---------------------------------------------------------------- ansible
 
-(defn inventory
-  "One host. The address is the only run-time fact the play needs; the login
-  user is what both advertised providers' images give (`params.user`)."
-  [opts]
-  (json/generate-string
-   {:all {:children {:redis {:hosts {(:profile opts)
-                                     {:ansible_host (or (:ip opts) placeholder-ip)
-                                      :ansible_user (or (:user opts) "root")}}}}}}
-   {:pretty true}))
+(defn inventory [opts]
+  (let [node (compute/node opts) identity (or (:ssh-private-key-path opts) (:ssh_identity_file node))]
+    (json/generate-string
+     {:all {:children {:redis {:hosts {(:profile opts)
+       (cond-> {:ansible_host (:ip node) :ansible_user (:user node)}
+         identity (assoc :ansible_ssh_private_key_file identity))}}}}} {:pretty true})))
 
 (defn ansible-data
   "Template values for the Ansible stage.
@@ -151,7 +130,7 @@
   needs it: not in `.colors/`, not in a golden, not in this map."
   [opts]
   (assoc opts
-         :ip (or (:ip opts) placeholder-ip)
+         :ip (:ip (compute/node opts))
          :ssh-keygen (validate/keygen? opts)
          :redis-backup-set-prefix (set-prefix opts)))
 

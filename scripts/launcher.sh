@@ -32,7 +32,7 @@ mkdir "$tmp/project"
 cp "$launcher" "$tmp/project/green"; chmod +x "$tmp/project/green"
 sed "s#WORKDIR#.colors#" "$root/test/fixtures/colors.yml" > "$tmp/project/colors.yml"
 (cd "$tmp/project" && REDIS_LIB_ROOT="$root" ./green build >/dev/null) || fail 'REDIS_LIB_ROOT build failed'
-[ -f "$tmp/project/.colors/redis-fixture/redis-infrastructure/main.tf" ] || fail 'copied payload rendered nothing'
+[ -f "$tmp/project/.colors/redis-fixture/redis-infrastructure/nodes/0/node-none.tf.json" ] || fail 'copied payload rendered nothing'
 [ -f "$tmp/project/.colors/redis-fixture/redis-ansible/compose.yml" ] || fail 'no ansible stage'
 [ -f "$tmp/project/.colors/redis-fixture/redis-ansible-local/main.yml" ] || fail 'no ssh-config stage'
 ok 'working-tree override renders from a copied payload'

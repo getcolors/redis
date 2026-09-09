@@ -7,7 +7,7 @@
   stage renders: the alias, the identity file, and the refusal to adopt a
   stanza this package did not write.
 
-  Unlike the keypair, this play is the package's own copy rather than ONCE's
+  Unlike the keypair, this play is the package's own copy rather than the compute library's
   (standard §7). The file is shared with every other host the operator reaches,
   so an unrelated change upstream must not be able to rewrite it at pin-bump
   time."

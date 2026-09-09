@@ -23,22 +23,6 @@ tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 accept=0
 [[ ${1:-} == --accept ]] && accept=1
 
-# What each provider's template must and must not render: one machine, a
-# firewall opening 22 alone, the params contract's provider line, and no
-# private network of any kind.
-declare -A instance=([vultr]='resource "vultr_instance" "redis"'
-                     [digitalocean]='resource "digitalocean_droplet" "redis"')
-declare -A firewall=([vultr]='resource "vultr_firewall_rule" "ssh"'
-                     [digitalocean]='resource "digitalocean_firewall" "redis"')
-declare -A port22=([vultr]='port              = "22"'
-                   [digitalocean]='port_range       = "22"')
-declare -A keyres=([vultr]='resource "vultr_ssh_key" "machine"'
-                   [digitalocean]='resource "digitalocean_ssh_key" "machine"')
-declare -A keyref=([vultr]='ssh_key_ids = \[vultr_ssh_key.machine.id\]'
-                   [digitalocean]='ssh_keys = \[digitalocean_ssh_key.machine.id\]')
-declare -A keylit=([vultr]='ssh_key_ids = \["00000000-0000-4000-8000-000000000000"\]'
-                   [digitalocean]='ssh_keys = \["00000000"\]')
-
 status=0
 for variant in colors optout colors-digitalocean optout-digitalocean; do
   fixture="$tmp/$variant.yml"
@@ -48,7 +32,7 @@ for variant in colors optout colors-digitalocean optout-digitalocean; do
   profile=$(sed -n 's/^profile: //p' "$fixture")
   provider=$(sed -n 's/^provider-compute: //p' "$fixture")
   actual="$tmp/work/$profile"
-  golden="$root/test/resources/golden/local/$profile"
+  golden="$root/test/resources/golden/r2/$profile"
 
   # No rendered artefact may carry a real secret into a committed golden.
   if grep -rEq 'BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY|github_pat_|ghp_|gho_|ghu_|ghs_|ghr_' "$actual"; then
@@ -76,32 +60,9 @@ for variant in colors optout colors-digitalocean optout-digitalocean; do
   for sh in "$actual"/redis-ansible/*.sh; do
     bash -n "$sh" || { echo "golden: $sh does not parse" >&2; exit 1; }
   done
-  # One machine, a firewall opening 22 alone, the provider recorded in params,
-  # and no private network.
-  infra="$actual/redis-infrastructure/main.tf"
-  for r in "${instance[$provider]}" "${firewall[$provider]}" "${port22[$provider]}" \
-           "provider = \"$provider\""; do
-    grep -qF "$r" "$infra" || { echo "golden: $profile infrastructure lacks: $r" >&2; exit 1; }
-  done
-  grep -q 'prevent_destroy = true' "$infra"
-  if grep -qE 'port(_range)? += +"(6379|80|443)"' "$infra"; then
-    echo "golden: $profile infrastructure opens a port other than 22" >&2; exit 1
-  fi
-  if grep -qE 'resource "(vultr_vpc|vultr_vpc2|digitalocean_vpc)"' "$infra"; then
-    echo "golden: $profile infrastructure creates a private network" >&2; exit 1
-  fi
-  # Keygen mode owns a profile-named account key resource; opt-out creates
-  # none and keeps the literal id it was given (SSH Keypair Standard §4.3, §5).
-  case $variant in
-    colors*)
-      grep -q "${keyres[$provider]}" "$infra" || { echo "golden: $profile lacks the account key resource" >&2; exit 1; }
-      grep -q "${keyref[$provider]}" "$infra" || { echo "golden: $profile does not reference the key by attribute" >&2; exit 1; } ;;
-    optout*)
-      if grep -q "${keyres[$provider]}" "$infra"; then
-        echo "golden: $profile (opt-out) rendered an account key resource" >&2; exit 1
-      fi
-      grep -q "${keylit[$provider]}" "$infra" || { echo "golden: $profile does not keep the literal key id" >&2; exit 1; } ;;
-  esac
+  mode=external
+  [[ $variant == colors* ]] && mode=managed
+  python3 "$root/scripts/compute-contract.py" "$actual/redis-infrastructure" "$provider" "$mode"
 
   # A build that reached the real ~/.ssh would leak the operator's home into
   # committed bytes and make the goldens workstation-specific.

@@ -10,10 +10,11 @@ protocol, and `./green rehearse` proves one of them restores.
 Nothing is published beyond loopback and no private network is created. The
 provider firewall opens **22 only**, there is no DNS record, and the
 supported client path is an SSH tunnel through the `~/.ssh/config` alias the
-package writes. `provider-compute` picks `vultr` or `digitalocean` per the
-workspace Compute Provider Standard: one `colors.yml` may carry both key
-blocks, and switching on a profile that already holds a machine is refused
-until that machine is deleted.
+package writes. Compute is supplied by the pinned colors-compute library;
+Vultr and DigitalOcean fixtures cover the existing configurations. Provider
+selection, credentials, SSH key ownership and S3/R2 state are library concerns.
+Legacy `<profile>/redis-infrastructure.tfstate` deployments require explicit
+migration; unreadable or foreign state never becomes a fresh deployment.
 
 ## Install
 

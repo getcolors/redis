@@ -76,7 +76,7 @@ operator-supplied.
 
 | Stage | What it manages |
 |---|---|
-| `redis-infrastructure` | one Vultr instance or one DigitalOcean droplet, a provider firewall opening 22 only, and in keygen mode the account SSH key named after the profile; the template is chosen by `provider-compute` and `params.provider` records which one produced the state |
+| `redis-infrastructure` | one Vultr instance or one DigitalOcean droplet, a provider firewall opening 22 only, and in keygen mode the account SSH key named after the profile; the shared library renders separate shared/node documents and records provider ownership |
 | `redis-ssh-config` | the `~/.ssh/config` block, so `ssh <profile>` works |
 | `redis-ansible` | Docker Compose with the pinned image, the generated password, the smoke gate, the backup and monitor timers, and the first backup set |
 | acceptance | the operator path from the workstation: an SSH tunnel through the generated alias, a `SET`/`GET` round-trip with the generated password, an unauthenticated `PING` refused, a wrong password refused, and the public address **not** answering on the Redis port |
@@ -130,15 +130,18 @@ the recovery marker and the container state.
 
 ## Compute providers
 
-`provider-compute` selects `vultr` (the default) or `digitalocean`; each has
-its own `<provider>-*` keys and template, one `colors.yml` may carry both
-blocks, and the unselected block is ignored. **Switching is a rebuild, never
-an apply:** every provider shares one state key, so a real `create` or
-`delete` on a profile whose state records a different provider is refused
-with `state holds a <provider> machine; set provider-compute back to
-<provider> and delete first`, before any credential is checked. A deployment
-created before the package recorded a provider counts as Vultr. On a real
-`delete`, a backend that cannot be read is an error, never an empty state.
+The pinned colors-compute library selects providers and validates their
+settings. This package passes a singleton topology and an SSH-only policy;
+it has no compute provider registry or templates. New provider support arrives
+through a library version bump. Vultr remains the default, and fixtures cover
+Vultr and DigitalOcean in both SSH modes.
+
+State is remote in S3 or R2, split into shared and node objects under
+`<profile>/compute/`. The ownership journal prevents conflicting operations.
+Legacy `<profile>/redis-infrastructure.tfstate` deployments require explicit
+migration. Unreadable state and provider mismatches are errors on every real
+operation. Delete, rehearse and describe read the recorded normalized node;
+only build output uses documentation addresses.
 
 ## Reference
 

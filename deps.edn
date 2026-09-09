@@ -2,18 +2,9 @@
  :deps {org.clojure/clojure       {:mvn/version "1.12.5"}
         io.github.getcolors/green {:git/url "https://github.com/getcolors/green.git"
                                    :git/sha "3f33f5d4dcce1f8d97a11b6972e13eb3f0b37654"}
-        ;; 38e3cd6 is the first ONCE whose `compute` — the Compute Provider
-        ;; Standard's operations this package delegates to — trusts the SDK's
-        ;; step error alone in `read-state`: it needs green 3f33f5d, which
-        ;; reports a tofu launch failure (no stage directory yet on a fresh
-        ;; work directory, no binary) as exit 127 and so as that step error,
-        ;; the way red and blue always did. The two pins move together or a
-        ;; fresh-clone create crashes (417d5f7 introduced the namespace);
-        ;; bc06f2f, below it, is where ONCE moved the machine keypair into
-        ;; the operator's ~/.ssh. The pin cannot go below either.
-        io.github.getcolors/once  {:git/url "https://github.com/getcolors/once.git"
-                                   :git/sha "38e3cd66674a32fb96605e1b17ae6791086ad5c1"
-                                   :deps/root "green"}}
+        io.github.getcolors/colors-compute {:git/url "https://github.com/getcolors/colors-compute.git"
+                                            :git/sha "3451a05e719b0ad6809f3c88b241a8c010b8f58b"
+                                            :deps/root "green"}}
  :aliases {:dev {:extra-paths ["test/clj" "test/resources"]}
            :test {:extra-paths ["test/clj" "test/resources"]
                   :extra-deps {io.github.cognitect-labs/test-runner

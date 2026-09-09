@@ -10,7 +10,7 @@ Non-secret values only: credentials are `COLORS_PAR_*` environment variables.
 | `profile` | Names the work directory, the OpenTofu state key (`<profile>/<stage>.tfstate`), the machine keypair, the `~/.ssh/config` alias, the provider resources, and the backup prefix (`<profile>/redis/`). Never overlay it from the environment. |
 | `workdir` | Where rendered output goes. Conventionally `.colors`. |
 | `provider-compute` | `vultr` (default) or `digitalocean`. Selects the template under `tools/infrastructure/<provider>/` and which `<provider>-*` keys are required; the other provider's keys are ignored. Changing it on a profile whose state holds a machine is refused on create and delete until that machine is deleted under its own provider. |
-| `provider-backend` | `local`, `s3` or `r2`. |
+| `provider-backend` | `s3` or `r2` (default). |
 | `compute-prevent-destroy` | Keep `true` in committed desired state. |
 
 There is deliberately no `provider-dns`: nothing in this package is reachable
@@ -71,15 +71,19 @@ Standard, and a key left over from an older `colors.yml` is ignored.
 | `digitalocean-ssh-keys` | Optional. Absent selects keygen mode; an existing account key id or fingerprint selects opt-out mode. |
 | `digitalocean-ssh-sources` | CIDRs allowed to reach 22 — the only open port. Same validation as the Vultr key. |
 
-The droplet joins the region's default VPC (`default-<region>`), discovered
-at plan time. `digitalocean-vpc-uuid` and `digitalocean-vpc-cidr` are refused:
-this package must not own a private network.
+The droplet uses the region's default VPC implicitly. No VPC lookup, explicit
+VPC setting or private CIDR is required. The library owns no private network
+for this public-only singleton.
 
 ## State backend
 
+`provider-backend` is `r2` or `s3`. S3 uses the ambient AWS credential chain
+and library settings `s3-bucket` and `s3-region`; R2 uses the pair below.
+The backup bucket settings remain independent of the state backend.
+
 | Key | Meaning |
 |---|---|
-| `r2-bucket`, `r2-endpoint` | Where `<profile>/<stage>.tfstate` lives when `provider-backend: r2`. |
+| `r2-bucket`, `r2-endpoint` | Where `<profile>/compute/shared.tfstate`, node state and the ownership journal live for R2. |
 
 ## Credentials
 
