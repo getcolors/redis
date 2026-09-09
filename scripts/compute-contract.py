@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 root, provider, mode = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 shared = {p.name: json.loads(p.read_text()) for p in (root / 'shared').glob('*.tf.json')}
-nodes = list((root / 'nodes').glob('*/*.tf.json'))
+nodes = list((root / 'nodes').glob('*/node*.tf.json'))
 assert len(nodes) == 1, 'Redis requires one node document'
 node = json.loads(nodes[0].read_text())
 params = node['output']['params']['value']

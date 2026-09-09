@@ -8,6 +8,7 @@
             [green.scaffold :as sc]
                         [green.workflow :as wf]
             [io.github.getcolors.redis.compute :as compute]
+            [io.github.getcolors.compute :as library]
             [io.github.getcolors.compute-orchestration :as orchestration]
             [io.github.getcolors.compute-inspection :as inspection]
             [io.github.getcolors.compute-planning :as planning]
@@ -49,6 +50,11 @@
                    (planning/plan-deployment opts (compute/topology opts) (compute/requirements opts))
                    (orchestration/orchestrate opts (compute/topology opts) (compute/requirements opts)))]
       (when planning?
+        (doseq [[stage key] (cons ["shared" (get-in result [:state_keys :shared])]
+                                 (map (fn [[id key]] [(str "nodes/" (name id)) key]) (get-in result [:state_keys :nodes]))) ]
+          (let [target (io/file (tool-dir opts infrastructure-tool) stage "backend.tf.json")]
+            (io/make-parents target)
+            (spit target (str (compute-json (:config (library/backend-plan opts key)) 0) "\n"))))
         (doseq [[stage documents] (cons ["shared" (get-in result [:documents :shared])]
                                       (map (fn [[id documents]] [(str "nodes/" id) documents]) (get-in result [:documents :nodes])))
                 [filename document] documents]
