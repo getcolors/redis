@@ -96,3 +96,8 @@
                   (is (= [{:name "redis-fixture" :ip "192.0.2.10" :user "root"}]
                          (get-in config [:extra-vars :ssh_hosts]))) opts)]
     (tools/ansible-local-step (fixture :green/event :build))))
+
+(deftest compute-json-accepts-library-mixed-key-maps
+  (is (= {"backups" true "region" "ams"}
+         (cheshire.core/parse-string
+          (#'io.github.getcolors.redis.tools/compute-json {:region "ams" "backups" true} 0)))))
