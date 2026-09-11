@@ -367,7 +367,9 @@ export async function runPlay(opts: Opts, playbook: string, credentials: boolean
     ["ansible-playbook", "-i", "inventory.json", playbook],
     { cwd: toolDir(opts, ansibleTool), env: playEnv(opts, credentials), timeoutMs: playTimeoutMs },
   );
-  const exit = (result.exit ?? 1) === 0 ? 0 : (result.exit ?? 1);
+  // A runtime timeout reports a negative exit; anything but 0 is a failure.
+  const raw = result.exit;
+  const exit = typeof raw !== "number" ? 1 : raw === 0 ? 0 : raw > 0 ? raw : 1;
   if (exit > 0) {
     return {
       ...rendered, "red/exit": exit,
@@ -439,11 +441,16 @@ export function closedPortArgs(ip: unknown, port: unknown): string[] {
   return ["bash", "-c", `timeout 5 bash -c 'exec 3<>/dev/tcp/${ip}/${port}'`];
 }
 
+export const passwordFile = "/etc/redis/secrets/password";
+export const remotePasswordCommand = `cat ${passwordFile} 2>/dev/null || sudo -n cat ${passwordFile}`;
+
 // The generated Redis password, read over SSH and held only in this process.
 // Never merged into opts, never printed.
 export async function readRemotePassword(opts: Opts): Promise<string | undefined> {
+  // root on the Vultr and DigitalOcean images, ubuntu on the AWS AMI: the
+  // plain read serves the first, the passwordless-sudo fallback the second.
   const result = await runQuiet(["ssh", "-o", "BatchMode=yes", sshConfig.hostAlias(opts),
-    "cat", "/etc/redis/secrets/password"], {}, 20000);
+    remotePasswordCommand], {}, 20000);
   return result.exit === 0 ? String(result.out ?? "").trim() : undefined;
 }
 

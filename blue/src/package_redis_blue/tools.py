@@ -327,7 +327,9 @@ async def run_play(opts: dict, playbook: str, credentials: bool) -> dict:
     result = await runtime.exec(["ansible-playbook", "-i", "inventory.json", playbook],
                                 cwd=tool_dir(opts, ansible_tool), env=play_env(opts, credentials),
                                 timeout_ms=PLAY_TIMEOUT_MS)
-    exit = result.exit if result.exit is not None else 1
+    # A runtime timeout reports a negative exit; anything but 0 is a failure.
+    raw = result.exit
+    exit = 1 if not isinstance(raw, int) else 0 if raw == 0 else raw if raw > 0 else 1
     if exit > 0:
         return {**rendered, "blue/exit": exit,
                 "blue/err": f"ansible-playbook {playbook} failed: {result.out or result.err or '(no output)'}"}
@@ -397,11 +399,17 @@ def closed_port_args(ip: str, port) -> list[str]:
     return ["bash", "-c", f"timeout 5 bash -c 'exec 3<>/dev/tcp/{_s(ip)}/{_s(port)}'"]
 
 
+PASSWORD_FILE = "/etc/redis/secrets/password"
+REMOTE_PASSWORD_COMMAND = f"cat {PASSWORD_FILE} 2>/dev/null || sudo -n cat {PASSWORD_FILE}"
+
+
 async def read_remote_password(opts: dict) -> str | None:
     """The generated Redis password, read over SSH and held only in this
     process. Never merged into opts, never printed."""
+    # root on the Vultr and DigitalOcean images, ubuntu on the AWS AMI: the
+    # plain read serves the first, the passwordless-sudo fallback the second.
     result = await run_quiet(["ssh", "-o", "BatchMode=yes", ssh_config.host_alias(opts),
-                              "cat", "/etc/redis/secrets/password"], {}, 20000)
+                              REMOTE_PASSWORD_COMMAND], {}, 20000)
     if result.exit == 0:
         return _s(result.out).strip()
     return None

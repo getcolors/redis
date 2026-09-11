@@ -86,7 +86,12 @@
       (with-redefs [green.process/run-with-timeout (runner 2 "fatal: unreachable")]
         (let [r (tools/run-play (fixture :green/event :create :green/dry-run true :ip "192.0.2.10" :workdir workdir) "main.yml" true)]
           (is (= 2 (:green/exit r)))
-          (is (str/includes? (:green/err r) "ansible-playbook main.yml failed: fatal: unreachable")))))))
+          (is (str/includes? (:green/err r) "ansible-playbook main.yml failed: fatal: unreachable")))))
+    (testing "a runtime timeout (negative exit) is a failure, never a pass"
+      (with-redefs [green.process/run-with-timeout (runner -1 "")]
+        (let [r (tools/run-play (fixture :green/event :create :green/dry-run true :ip "192.0.2.10" :workdir workdir) "main.yml" true)]
+          (is (= 1 (:green/exit r)))
+          (is (str/includes? (:green/err r) "ansible-playbook main.yml failed")))))))
 
 (deftest the-compose-file-publishes-on-loopback-alone
   ;; Exposure is decided by what Compose publishes: one binding, loopback.

@@ -67,7 +67,8 @@ async def ownership_preflight(opts: dict) -> None:
     cwd, env = directory(opts), aws_env(opts)
     await checked(["tofu", "init", "-input=false", "-no-color"], cwd, env)
     state = await runtime.exec(["tofu", "state", "list"], cwd=cwd, env=env)
-    empty_state = state.exit == 1 and "No state file was found!" in _s(state.err)
+    # OpenTofu 1.11 prints "No state file was found!", 1.12 "Error: No state file was found".
+    empty_state = state.exit == 1 and "No state file was found" in _s(state.err)
     if not (state.exit == 0 or empty_state):
         raise RuntimeError("managed storage state unavailable")
     addresses = {line for line in ("" if empty_state else state.out).splitlines() if line.strip()}

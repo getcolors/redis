@@ -211,7 +211,8 @@
             result (process/run-with-timeout ["ansible-playbook" "-i" "inventory.json" playbook]
                                              {:dir (tool-dir opts ansible-tool) :extra-env (play-env opts credentials?)}
                                              play-timeout-ms)
-            exit (if (zero? (or (:exit result) 1)) 0 (or (:exit result) 1))]
+            ;; A runtime timeout reports a negative exit; anything but 0 is a failure.
+            exit (let [e (:exit result)] (cond (not (integer? e)) 1 (zero? e) 0 (pos? e) e :else 1))]
         (cond
           (pos? exit) (assoc rendered :green/exit exit
                              :green/err (str "ansible-playbook " playbook " failed: "

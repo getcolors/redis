@@ -98,6 +98,11 @@ async def test_the_play_runner_mirrors_the_sdk_step(monkeypatch, tmp_path):
     result = await tools.run_play(opts, "main.yml", True)
     assert result["blue/exit"] == 2
     assert "ansible-playbook main.yml failed: fatal: unreachable" in result["blue/err"]
+    # a runtime timeout (negative exit) is a failure, never a pass
+    monkeypatch.setattr(runtime, "exec", runner(-1, ""))
+    result = await tools.run_play(opts, "main.yml", True)
+    assert result["blue/exit"] == 1
+    assert "ansible-playbook main.yml failed" in result["blue/err"]
 
 
 def test_the_compose_file_publishes_on_loopback_alone():

@@ -66,7 +66,8 @@ export async function ownershipPreflight(opts: Opts): Promise<void> {
   const options: ExecOptions = { cwd: directory(opts), env: awsEnv(opts) };
   await checked(["tofu", "init", "-input=false", "-no-color"], options);
   const state = await runtime.exec(["tofu", "state", "list"], options);
-  const emptyState = state.exit === 1 && String(state.err ?? "").includes("No state file was found!");
+  // OpenTofu 1.11 prints "No state file was found!", 1.12 "Error: No state file was found".
+  const emptyState = state.exit === 1 && /No state file was found/.test(String(state.err ?? ""));
   if (!(state.exit === 0 || emptyState)) throw new Error("managed storage state unavailable");
   const addresses = new Set((emptyState ? "" : state.out).split(/\r?\n/));
   const recorded: Record<string, unknown> = {};

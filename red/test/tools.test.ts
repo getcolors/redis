@@ -122,6 +122,11 @@ describe("tools", () => {
         "main.yml", true, { exec: runner(2, "fatal: unreachable") });
       expect(failed["red/exit"]).toBe(2);
       expect(String(failed["red/err"])).toContain("ansible-playbook main.yml failed: fatal: unreachable");
+      // A runtime timeout (negative exit) is a failure, never a pass.
+      const timedOut = await tools.runPlay(fixture({ "red/event": "create", "red/dry-run": true, ip: "192.0.2.10", workdir }),
+        "main.yml", true, { exec: runner(-1, "") });
+      expect(timedOut["red/exit"]).toBe(1);
+      expect(String(timedOut["red/err"])).toContain("ansible-playbook main.yml failed");
       // A managed deployment hands the scoped pair to the play.
       const managed = await tools.runPlay(awsFixture({ "red/event": "rehearse", "red/dry-run": true, workdir, [storage.credentialsKey]: credentials }),
         "rehearsal.yml", true, { exec: runner(0, recap) });
