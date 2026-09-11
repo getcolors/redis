@@ -128,6 +128,27 @@ async def test_a_delete_without_compute_skips_the_host_entirely():
     assert (await tools.ansible_step({**fixture({"blue/event": "build"}), "blue/event": "delete"}))["blue/exit"] == 0
 
 
+async def test_the_cleanup_play_needs_no_storage_credentials(monkeypatch, tmp_path):
+    # On the delete DAG the storage stage runs after the play, so the managed
+    # pair has not been read; the cleanup play must not ask for it.
+    runs = []
+    recap = "PLAY RECAP\nredis-aws-fixture : ok=2 changed=1 unreachable=0 failed=0 skipped=0 rescued=0 ignored=0\n"
+
+    async def exec(args, cwd=None, env=None, timeout_ms=None):
+        runs.append((args, env))
+        return ExecResult(0, recap, "")
+
+    monkeypatch.setattr(runtime, "exec", exec)
+    deleted = await tools.ansible_step(aws_fixture({"blue/event": "delete", "blue/dry-run": True, "ip": "192.0.2.10", "workdir": str(tmp_path)}))
+    assert deleted["blue/exit"] == 0
+    assert runs[-1] == (["ansible-playbook", "-i", "inventory.json", "cleanup.yml"], {"ANSIBLE_HOST_KEY_CHECKING": "False"})
+    created = await tools.ansible_step({**aws_fixture({"blue/event": "create", "blue/dry-run": True, "ip": "192.0.2.10", "workdir": str(tmp_path)}),
+                                        storage.CREDENTIALS_KEY: CREDENTIALS})
+    assert created["blue/exit"] == 0
+    assert runs[-1][0] == ["ansible-playbook", "-i", "inventory.json", "main.yml"]
+    assert runs[-1][1]["COLORS_PAR_REDIS_BACKUP_R2_ACCESS_KEY_ID"] == CREDENTIALS["credentials"]["backup"]["access_key_id"]
+
+
 async def test_acceptance_is_skipped_outside_a_real_create():
     for event in ["build", "delete", "rehearse", "describe"]:
         assert (await tools.acceptance_step({**fixture({"blue/event": "build"}), "blue/event": event}))["blue/exit"] == 0

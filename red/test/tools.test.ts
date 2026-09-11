@@ -162,6 +162,25 @@ describe("tools", () => {
     expect(result["red/exit"]).toBe(0);
   });
 
+  test("the cleanup play needs no storage credentials", async () => {
+    // On the delete DAG the storage stage runs after the play, so the managed
+    // pair has not been read; the cleanup play must not ask for it.
+    const runs: Array<[string[], ExecOptions | undefined]> = [];
+    const recap = "PLAY RECAP\nredis-aws-fixture : ok=2 changed=1 unreachable=0 failed=0 skipped=0 rescued=0 ignored=0\n";
+    runtime.exec = async (args: string[], options?: ExecOptions): Promise<ExecResult> => {
+      runs.push([args, options]);
+      return { exit: 0, out: recap, err: "" };
+    };
+    const deleted = await tools.ansibleStep(awsFixture({ "red/event": "delete", "red/dry-run": true, ip: "192.0.2.10", workdir: tempWorkdir() }));
+    expect(deleted["red/exit"]).toBe(0);
+    expect(runs.at(-1)![0]).toEqual(["ansible-playbook", "-i", "inventory.json", "cleanup.yml"]);
+    expect(runs.at(-1)![1]?.env).toEqual({ ANSIBLE_HOST_KEY_CHECKING: "False" });
+    const created = await tools.ansibleStep(awsFixture({ "red/event": "create", "red/dry-run": true, ip: "192.0.2.10", workdir: tempWorkdir(), [storage.credentialsKey]: credentials }));
+    expect(created["red/exit"]).toBe(0);
+    expect(runs.at(-1)![0]).toEqual(["ansible-playbook", "-i", "inventory.json", "main.yml"]);
+    expect(runs.at(-1)![1]?.env?.COLORS_PAR_REDIS_BACKUP_R2_ACCESS_KEY_ID).toBe("AKIA");
+  });
+
   test("acceptance is skipped outside a real create", async () => {
     runtime.exec = async () => { throw new Error("must not run"); };
     for (const event of ["build", "delete", "rehearse", "describe"]) {

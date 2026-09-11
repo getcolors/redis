@@ -380,13 +380,19 @@ export async function runPlay(opts: Opts, playbook: string, credentials: boolean
   return event === "delete" ? scaffold(succeeded, specs) : succeeded;
 }
 
+// The converge play, or on delete the cleanup play. The cleanup play stops
+// the service and reads no backup credentials, and on the delete DAG the
+// storage stage runs after it (the bucket outlives the machine), so nothing
+// has read the managed pair yet: asking for it there is what failed the
+// first delete of redis-aws.
 export async function ansibleStep(opts: Opts): Promise<Opts> {
-  if (opts["red/event"] === "delete" && !opts.ip) {
+  const isDelete = opts["red/event"] === "delete";
+  if (isDelete && !opts.ip) {
     // No compute in state: there is no host to stop, and the cleanup play
     // would only fail against the placeholder address.
     return { ...opts, "red/exit": 0 };
   }
-  return runPlay(opts, opts["red/event"] === "delete" ? "cleanup.yml" : "main.yml", true);
+  return runPlay(opts, isDelete ? "cleanup.yml" : "main.yml", !isDelete);
 }
 
 // The recovery rehearsal: a fresh backup set, its restore into a scratch

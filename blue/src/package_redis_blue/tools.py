@@ -339,11 +339,17 @@ async def run_play(opts: dict, playbook: str, credentials: bool) -> dict:
 
 
 async def ansible_step(opts: dict) -> dict:
-    if opts.get("blue/event") == "delete" and not opts.get("ip"):
+    """The converge play, or on delete the cleanup play. The cleanup play stops
+    the service and reads no backup credentials, and on the delete DAG the
+    storage stage runs after it (the bucket outlives the machine), so nothing
+    has read the managed pair yet: asking for it there is what failed the
+    first delete of redis-aws."""
+    is_delete = opts.get("blue/event") == "delete"
+    if is_delete and not opts.get("ip"):
         # No compute in state: there is no host to stop, and the cleanup play
         # would only fail against the placeholder address.
         return {**opts, "blue/exit": 0}
-    return await run_play(opts, "cleanup.yml" if opts.get("blue/event") == "delete" else "main.yml", True)
+    return await run_play(opts, "cleanup.yml" if is_delete else "main.yml", not is_delete)
 
 
 async def rehearsal_step(opts: dict) -> dict:

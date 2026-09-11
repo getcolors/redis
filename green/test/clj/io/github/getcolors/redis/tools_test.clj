@@ -161,3 +161,20 @@
     (testing "a failed read is nil, never a partial reply"
       (with-redefs [tools/run-quiet (fn [& _] {:exit 1 :out "" :err "Permission denied"})]
         (is (nil? (tools/read-remote-password (aws-fixture))))))))
+
+(deftest the-cleanup-play-needs-no-storage-credentials
+  ;; On the delete DAG the storage stage runs after the play, so the managed
+  ;; pair has not been read; the cleanup play must not ask for it.
+  (let [runs (atom [])
+        recap "PLAY RECAP\nredis-aws-fixture : ok=2 changed=1 unreachable=0 failed=0 skipped=0 rescued=0 ignored=0\n"]
+    (with-redefs [green.process/run-with-timeout (fn [args opts _] (swap! runs conj [args (:extra-env opts)]) {:exit 0 :out recap :err ""})]
+      (testing "a managed delete with no pair in opts runs the cleanup play with host-key checking off alone"
+        (let [r (tools/ansible-step (aws-fixture :green/event :delete :green/dry-run true :ip "192.0.2.10" :workdir (temp-workdir)))]
+          (is (= 0 (:green/exit r)))
+          (is (= [["ansible-playbook" "-i" "inventory.json" "cleanup.yml"] {"ANSIBLE_HOST_KEY_CHECKING" "False"}] (last @runs)))))
+      (testing "a managed create still hands the pair to the converge play"
+        (let [credentials {:credentials {"backup" {"access_key_id" "AKIA" "secret_access_key" "s"}}}
+              r (tools/ansible-step (aws-fixture :green/event :create :green/dry-run true :ip "192.0.2.10" :workdir (temp-workdir) storage/credentials-key credentials))]
+          (is (= 0 (:green/exit r)))
+          (is (= ["ansible-playbook" "-i" "inventory.json" "main.yml"] (first (last @runs))))
+          (is (= "AKIA" (get (second (last @runs)) "COLORS_PAR_REDIS_BACKUP_R2_ACCESS_KEY_ID"))))))))

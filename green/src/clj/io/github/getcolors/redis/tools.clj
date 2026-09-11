@@ -220,12 +220,19 @@
           (= :delete event) (sc/scaffold (assoc rendered :green/exit 0 :ansible/recap (ansible/parse-recap (:out result))) specs)
           :else (assoc rendered :green/exit 0 :ansible/recap (ansible/parse-recap (:out result))))))))
 
-(defn ansible-step [opts]
-  (if (and (= :delete (:green/event opts)) (not (:ip opts)))
-    ;; No compute in state: there is no host to stop, and the cleanup play
-    ;; would only fail against the placeholder address.
-    (assoc opts :green/exit 0)
-    (run-play opts (if (= :delete (:green/event opts)) "cleanup.yml" "main.yml") true)))
+(defn ansible-step
+  "The converge play, or on delete the cleanup play. The cleanup play stops
+  the service and reads no backup credentials, and on the delete DAG the
+  storage stage runs after it (the bucket outlives the machine), so nothing
+  has read the managed pair yet: asking for it there is what failed the
+  first delete of redis-aws."
+  [opts]
+  (let [delete? (= :delete (:green/event opts))]
+    (if (and delete? (not (:ip opts)))
+      ;; No compute in state: there is no host to stop, and the cleanup play
+      ;; would only fail against the placeholder address.
+      (assoc opts :green/exit 0)
+      (run-play opts (if delete? "cleanup.yml" "main.yml") (not delete?)))))
 
 (defn rehearsal-step
   "The recovery rehearsal: a fresh backup set, its restore into a scratch
