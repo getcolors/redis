@@ -17,25 +17,27 @@ from `../langfuse`, and the managed bucket from `../neon-multi-node`.
 
 ## Layout
 
-The repository carries the tri-colour layout of `../neon`. Green and red
-exist today. `green/` holds `bb.edn`, `deps.edn`, `src/`, `tasks/` and
-`test/clj/`; `green/green` is a symlink to the payload
-`skills/package-redis-green/green`. `red/` holds `package.json`,
-`src/`, `test/` and `resources/`, a byte-identical copy of green's template
-tree that `scripts/parity.sh` diffs; `red/red` is a symlink to the payload
-`skills/package-redis-red/red`. There is no launcher at the root. Fixtures
-and goldens are shared at the root (`test/fixtures/`,
+The repository carries the tri-colour layout of `../neon`. `green/` holds
+`bb.edn`, `deps.edn`, `src/`, `tasks/` and `test/clj/`; `green/green` is a
+symlink to the payload `skills/package-redis-green/green`. `red/` holds
+`package.json`, `src/`, `test/` and `resources/`; `red/red` is a symlink to
+the payload `skills/package-redis-red/red`. `blue/` holds `pyproject.toml`,
+`src/package_redis_blue/` and `tests/`; `blue/blue` is a symlink to the
+payload `skills/package-redis-blue/blue`. There is no launcher at the root.
+Fixtures and goldens are shared at the root (`test/fixtures/`,
 `test/resources/golden/<backend>/<profile>/`) with symlinks from
-`green/test/`; the red suites read them by relative path. The root
-`package.json` is the facade a consumer installs as `package-redis-red`,
-`scripts/parity.sh` renders every fixture through green and red and carries
-the disabled blue line, and `green/tasks/pin.clj` stamps the green and red
-sites and is shaped so the blue site can be added. A port must render every
-fixture byte-identically to green and copy green's template tree; it must
-not own templates of its own. In red the same behaviours live in the same
-modules (`compute`, `ssh`, `ssh-config`, `storage`, `tools`, `validate`,
-`workflow`), engine keys use the `red/` namespace and package keys keep
-green's names (`redis/already-destroyed`, `redis/storage-credentials`).
+`green/test/`; the red suites read them by relative path and the blue
+tests through `tests/conftest.py`. The root `package.json` is the facade a
+consumer installs as `package-redis-red`, `scripts/parity.sh` renders every
+fixture through all three colours, and `green/tasks/pin.clj` stamps the
+three payload sites. `red/resources` and
+`blue/src/package_redis_blue/resources` are byte-identical copies of green's
+template tree, enforced by `scripts/parity.sh`; a port renders every fixture
+byte-identically to green and owns no templates of its own. In red and blue
+the same behaviours live in the same modules (`compute`, `ssh`,
+`ssh-config`, `storage`, `tools`, `validate`, `workflow`), engine keys use
+the colour's namespace and package keys keep green's names
+(`redis/already-destroyed`, `redis/storage-credentials`).
 
 ## Things to understand before touching anything
 
@@ -145,11 +147,12 @@ dry-run render `/home/build-placeholder/.ssh/<profile>` rather than reading
 ```sh
 cd green && bb test
 cd green && bb golden      # six fixtures: keygen and opt-out on Vultr, DigitalOcean and AWS
+cd blue && uv sync && uv run pytest
 cd green && bb golden:accept   # only after reading the diff
 cd green && bb syntax      # offline ansible-playbook --syntax-check + bash -n
 cd red && bun install && bun test && bun run typecheck
 ./scripts/launcher.sh      # from the repository root
-./scripts/parity.sh        # every fixture through every colour that exists
+./scripts/parity.sh        # every fixture through green, red and blue, byte for byte
 cd green && ./green build
 cd green && ./green create --dry-run
 cd green && ./green create     # requires explicit authorization
@@ -172,16 +175,18 @@ must not touch `~/.ssh`.
 
 `green/deps.edn` pins Green and colors-compute; `red/package.json` pins the
 Red SDK and colors-compute, and the red launcher's `PINS` carries the
-colors-compute pin a copied payload resolves. Both colours pin
-colors-compute at the same commit, which `scripts/launcher.sh` checks.
-Provider support changes belong in colors-compute and reach Redis through a
-library version bump; the managed S3 backend (`compute-managed-backend`)
-and AWS arrived with the pin at `09ec539`. Use `GREEN_LIB_ROOT`,
-`COLORS_COMPUTE_LIB_ROOT` and `REDIS_LIB_ROOT` for development;
-`REDIS_LIB_ROOT` names the repository root and each launcher adds its own
-colour directory, the way `NEON_LIB_ROOT` works (red also accepts the `red/`
-directory itself). `bb pin` (from `green/`) stamps both payloads from a
-clean pushed HEAD; deployment launchers are copies, not symlinks.
+colors-compute pin a copied payload resolves; `blue/pyproject.toml` pins the
+blue SDK and colors-compute, and the blue payload's PEP 723 block repeats
+them once `bb pin` stamps it. All three colours pin colors-compute at the
+same commit, which `scripts/launcher.sh` checks. Provider support changes
+belong in colors-compute and reach Redis through a library version bump; the
+managed S3 backend (`compute-managed-backend`) and AWS arrived with the pin
+at `09ec539`. Use `GREEN_LIB_ROOT`, `COLORS_COMPUTE_LIB_ROOT` and
+`REDIS_LIB_ROOT` for development; `REDIS_LIB_ROOT` names the repository root
+and each launcher adds its own colour directory, the way `NEON_LIB_ROOT`
+works (red also accepts the `red/` directory itself). `bb pin` (from
+`green/`) stamps all three payloads from a clean pushed HEAD; deployment
+launchers are copies, not symlinks.
 
 ## Documentation
 
