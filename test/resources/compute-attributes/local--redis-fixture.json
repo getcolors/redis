@@ -1,0 +1,253 @@
+{
+  "configuration": {
+    "provider": [
+      {
+        "vultr": {}
+      }
+    ],
+    "terraform": [
+      {
+        "backend": {
+          "local": {}
+        }
+      },
+      {
+        "required_providers": [
+          {
+            "vultr": {
+              "source": "vultr/vultr",
+              "version": "~> 2.0"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "data_queries": [],
+  "outputs": {
+    "params": {
+      "value": {
+        "ip": {
+          "$expression": [
+            "attribute",
+            {
+              "$expression": [
+                "attribute",
+                {
+                  "$expression": [
+                    "reference",
+                    "vultr_instance"
+                  ]
+                },
+                "redis"
+              ]
+            },
+            "main_ip"
+          ]
+        },
+        "name": "redis-fixture",
+        "provider": "vultr",
+        "ssh_key_id": {
+          "$expression": [
+            "attribute",
+            {
+              "$expression": [
+                "attribute",
+                {
+                  "$expression": [
+                    "reference",
+                    "vultr_ssh_key"
+                  ]
+                },
+                "machine"
+              ]
+            },
+            "id"
+          ]
+        },
+        "sudoer": "root",
+        "user": "root"
+      }
+    }
+  },
+  "resources": {
+    "vultr_firewall_group.redis": {
+      "instances": {
+        "null": {
+          "description": "redis-fixture-firewall"
+        }
+      },
+      "kind": "single"
+    },
+    "vultr_firewall_rule.ssh": {
+      "instances": {
+        "\"0.0.0.0/0\"": {
+          "firewall_group_id": {
+            "$expression": [
+              "attribute",
+              {
+                "$expression": [
+                  "attribute",
+                  {
+                    "$expression": [
+                      "reference",
+                      "vultr_firewall_group"
+                    ]
+                  },
+                  "redis"
+                ]
+              },
+              "id"
+            ]
+          },
+          "ip_type": "v4",
+          "port": "22",
+          "protocol": "tcp",
+          "subnet": "0.0.0.0",
+          "subnet_size": 0
+        },
+        "\"::/0\"": {
+          "firewall_group_id": {
+            "$expression": [
+              "attribute",
+              {
+                "$expression": [
+                  "attribute",
+                  {
+                    "$expression": [
+                      "reference",
+                      "vultr_firewall_group"
+                    ]
+                  },
+                  "redis"
+                ]
+              },
+              "id"
+            ]
+          },
+          "ip_type": "v6",
+          "port": "22",
+          "protocol": "tcp",
+          "subnet": "::",
+          "subnet_size": 0
+        }
+      },
+      "kind": "for_each"
+    },
+    "vultr_instance.redis": {
+      "instances": {
+        "null": {
+          "connection": [
+            {
+              "host": {
+                "$expression": [
+                  "attribute",
+                  {
+                    "$expression": [
+                      "reference",
+                      "self"
+                    ]
+                  },
+                  "main_ip"
+                ]
+              },
+              "private_key": {
+                "$expression": [
+                  "call",
+                  "file",
+                  [
+                    "/home/build-placeholder/.ssh/redis-fixture"
+                  ]
+                ]
+              },
+              "type": "ssh",
+              "user": "root"
+            }
+          ],
+          "firewall_group_id": {
+            "$expression": [
+              "attribute",
+              {
+                "$expression": [
+                  "attribute",
+                  {
+                    "$expression": [
+                      "reference",
+                      "vultr_firewall_group"
+                    ]
+                  },
+                  "redis"
+                ]
+              },
+              "id"
+            ]
+          },
+          "label": "redis-fixture",
+          "lifecycle": [
+            {
+              "prevent_destroy": true
+            }
+          ],
+          "os_id": 2284,
+          "plan": "vc2-1c-2gb",
+          "provisioner": [
+            {
+              "remote-exec": {
+                "inline": [
+                  "ls"
+                ]
+              }
+            }
+          ],
+          "region": "ams",
+          "ssh_key_ids": [
+            {
+              "$expression": [
+                "attribute",
+                {
+                  "$expression": [
+                    "attribute",
+                    {
+                      "$expression": [
+                        "reference",
+                        "vultr_ssh_key"
+                      ]
+                    },
+                    "machine"
+                  ]
+                },
+                "id"
+              ]
+            }
+          ]
+        }
+      },
+      "kind": "single"
+    },
+    "vultr_ssh_key.machine": {
+      "instances": {
+        "null": {
+          "name": "redis-fixture",
+          "ssh_key": {
+            "$expression": [
+              "call",
+              "trimspace",
+              [
+                {
+                  "$expression": [
+                    "call",
+                    "file",
+                    [
+                      "/home/build-placeholder/.ssh/redis-fixture.pub"
+                    ]
+                  ]
+                }
+              ]
+            ]
+          }
+        }
+      },
+      "kind": "single"
+    }
+  }
+}

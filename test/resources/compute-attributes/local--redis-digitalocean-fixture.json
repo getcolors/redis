@@ -1,0 +1,262 @@
+{
+  "configuration": {
+    "provider": [
+      {
+        "digitalocean": {}
+      }
+    ],
+    "terraform": [
+      {
+        "backend": {
+          "local": {}
+        }
+      },
+      {
+        "required_providers": [
+          {
+            "digitalocean": {
+              "source": "digitalocean/digitalocean",
+              "version": "~> 2.0"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "data_queries": [
+    {
+      "body": {
+        "name": "default-ams3"
+      },
+      "type": "digitalocean_vpc"
+    }
+  ],
+  "outputs": {
+    "params": {
+      "value": {
+        "ip": {
+          "$expression": [
+            "attribute",
+            {
+              "$expression": [
+                "attribute",
+                {
+                  "$expression": [
+                    "reference",
+                    "digitalocean_droplet"
+                  ]
+                },
+                "redis"
+              ]
+            },
+            "ipv4_address"
+          ]
+        },
+        "name": "redis-digitalocean-fixture",
+        "provider": "digitalocean",
+        "ssh_key_id": {
+          "$expression": [
+            "attribute",
+            {
+              "$expression": [
+                "attribute",
+                {
+                  "$expression": [
+                    "reference",
+                    "digitalocean_ssh_key"
+                  ]
+                },
+                "machine"
+              ]
+            },
+            "id"
+          ]
+        },
+        "sudoer": "root",
+        "user": "root"
+      }
+    }
+  },
+  "resources": {
+    "digitalocean_droplet.redis": {
+      "instances": {
+        "null": {
+          "connection": [
+            {
+              "host": {
+                "$expression": [
+                  "attribute",
+                  {
+                    "$expression": [
+                      "reference",
+                      "self"
+                    ]
+                  },
+                  "ipv4_address"
+                ]
+              },
+              "private_key": {
+                "$expression": [
+                  "call",
+                  "file",
+                  [
+                    "/home/build-placeholder/.ssh/redis-digitalocean-fixture"
+                  ]
+                ]
+              },
+              "type": "ssh",
+              "user": "root"
+            }
+          ],
+          "image": "ubuntu-24-04-x64",
+          "lifecycle": [
+            {
+              "prevent_destroy": true
+            }
+          ],
+          "name": "redis-digitalocean-fixture",
+          "provisioner": [
+            {
+              "remote-exec": {
+                "inline": [
+                  "ls"
+                ]
+              }
+            }
+          ],
+          "region": "ams3",
+          "size": "s-1vcpu-2gb",
+          "ssh_keys": [
+            {
+              "$expression": [
+                "attribute",
+                {
+                  "$expression": [
+                    "attribute",
+                    {
+                      "$expression": [
+                        "reference",
+                        "digitalocean_ssh_key"
+                      ]
+                    },
+                    "machine"
+                  ]
+                },
+                "id"
+              ]
+            }
+          ],
+          "vpc_uuid": {
+            "$expression": [
+              "attribute",
+              {
+                "$expression": [
+                  "data-query",
+                  "digitalocean_vpc",
+                  {
+                    "name": "default-ams3"
+                  }
+                ]
+              },
+              "id"
+            ]
+          }
+        }
+      },
+      "kind": "single"
+    },
+    "digitalocean_firewall.redis": {
+      "instances": {
+        "null": {
+          "droplet_ids": [
+            {
+              "$expression": [
+                "attribute",
+                {
+                  "$expression": [
+                    "attribute",
+                    {
+                      "$expression": [
+                        "reference",
+                        "digitalocean_droplet"
+                      ]
+                    },
+                    "redis"
+                  ]
+                },
+                "id"
+              ]
+            }
+          ],
+          "inbound_rule": [
+            {
+              "port_range": "22",
+              "protocol": "tcp",
+              "source_addresses": [
+                "0.0.0.0/0",
+                "::/0"
+              ]
+            }
+          ],
+          "lifecycle": [
+            {
+              "prevent_destroy": true
+            }
+          ],
+          "name": "redis-digitalocean-fixture-firewall",
+          "outbound_rule": [
+            {
+              "destination_addresses": [
+                "0.0.0.0/0",
+                "::/0"
+              ],
+              "port_range": "1-65535",
+              "protocol": "tcp"
+            },
+            {
+              "destination_addresses": [
+                "0.0.0.0/0",
+                "::/0"
+              ],
+              "port_range": "1-65535",
+              "protocol": "udp"
+            },
+            {
+              "destination_addresses": [
+                "0.0.0.0/0",
+                "::/0"
+              ],
+              "protocol": "icmp"
+            }
+          ]
+        }
+      },
+      "kind": "single"
+    },
+    "digitalocean_ssh_key.machine": {
+      "instances": {
+        "null": {
+          "name": "redis-digitalocean-fixture",
+          "public_key": {
+            "$expression": [
+              "call",
+              "trimspace",
+              [
+                {
+                  "$expression": [
+                    "call",
+                    "file",
+                    [
+                      "/home/build-placeholder/.ssh/redis-digitalocean-fixture.pub"
+                    ]
+                  ]
+                }
+              ]
+            ]
+          }
+        }
+      },
+      "kind": "single"
+    }
+  }
+}

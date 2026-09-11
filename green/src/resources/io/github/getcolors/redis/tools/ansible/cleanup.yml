@@ -1,0 +1,17 @@
+---
+# Stop the service before infrastructure deletion. The backup sets in R2 are
+# deliberately left in place: they are the durable half of the deployment,
+# and the documented recovery path restores from them onto a fresh host.
+# Removing them is a separate, manual decision.
+- name: Stop Redis before infrastructure deletion
+  hosts: redis
+  become: true
+  gather_facts: false
+  pre_tasks:
+    - ansible.builtin.wait_for_connection: {connect_timeout: 10, delay: 0, sleep: 5, timeout: 300}
+  tasks:
+    - ansible.builtin.command: docker compose down
+      args: {chdir: /opt/redis}
+      register: compose_down
+      changed_when: "'Removed' in (compose_down.stderr + compose_down.stdout)"
+      failed_when: false

@@ -17,7 +17,7 @@ def main():
     if not executable:
         parser.error('ansible-playbook is unavailable; run under uv --with ansible-core')
     root = Path(__file__).resolve().parents[1]
-    source = root / 'src/resources/io/github/getcolors/redis/tools/ansible-local/main.yml'
+    source = root / 'green/src/resources/io/github/getcolors/redis/tools/ansible-local/main.yml'
     with tempfile.TemporaryDirectory(prefix='colors-ssh-ansible-') as directory:
         work = Path(directory)
         home = work / 'home'

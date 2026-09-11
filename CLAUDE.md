@@ -6,13 +6,29 @@ file covers only what is specific to `redis`.
 
 ## What this is
 
-A green-only Package Skill: one Redis 7.2 server on one Vultr instance or
-one DigitalOcean droplet — one Docker Compose service, published on loopback
-only, reached over an SSH tunnel, with RDB backup sets in Cloudflare R2 and
-a rehearsal verb that proves one of them restores. The first consumer is
-`../redis-vultr`. Code and tests are authoritative; the shape was taken
-from `../neon` (single node, no DNS, tunnel client path) and the backup-set
-protocol and Redis pieces from `../langfuse`.
+A Package Skill: one Redis 7.2 server on one Vultr instance, one
+DigitalOcean droplet or one AWS EC2 instance: one Docker Compose service,
+published on loopback only, reached over an SSH tunnel, with RDB backup sets
+in Cloudflare R2 or in a deployment-owned S3 bucket, and a rehearsal verb
+that proves one of them restores. The first consumer is `../redis-vultr`.
+Code and tests are authoritative; the shape was taken from `../neon` (single
+node, no DNS, tunnel client path), the backup-set protocol and Redis pieces
+from `../langfuse`, and the managed bucket from `../neon-multi-node`.
+
+## Layout
+
+The repository carries the tri-colour layout of `../neon`. Today only the
+green implementation exists: `green/` holds `bb.edn`, `deps.edn`, `src/`,
+`tasks/` and `test/clj/`; `green/green` is a symlink to the payload
+`skills/package-redis-green/green`, and there is no launcher at the root.
+Fixtures and goldens are shared at the root (`test/fixtures/`,
+`test/resources/golden/<backend>/<profile>/`) with symlinks from
+`green/test/`. The root `package.json` is the facade the red port drops
+into, `scripts/parity.sh` renders every fixture and carries the disabled red
+and blue lines, and `green/tasks/pin.clj` stamps the green site and is
+shaped so the red and blue sites can be added. A red or blue port must
+render every fixture byte-identically to green and copy green's template
+tree; it must not own templates of its own.
 
 ## Things to understand before touching anything
 
@@ -59,6 +75,46 @@ protocol and Redis pieces from `../langfuse`.
 - **Ansible splits shell blocks before running them**, counting quotes across
   comments. Quoting-heavy shell lives in the installed scripts; `bb syntax`
   reproduces every load-time failure offline in a second.
+- **The managed bucket is a stage, and its pair is an output.** With
+  `redis-storage-managed: true` (AWS only) `storage.clj` renders
+  `tools/storage/main.tf`: the bucket named by `redis-backup-r2-bucket`,
+  its public access block and AES256 encryption, `force_destroy = true`,
+  `prevent_destroy` from `compute-prevent-destroy`, an IAM user
+  `<profile>-storage-backup` with a bucket-scoped policy, and one access
+  key as the sensitive `credentials` output. `tools/run-play` hands that
+  pair to ansible-playbook as `COLORS_PAR_REDIS_BACKUP_R2_ACCESS_KEY_ID`
+  and `_SECRET_ACCESS_KEY`, so `main.yml` keeps its `lookup('env', ...)`
+  expressions and `golden.sh` keeps asserting them. The pair never enters a
+  template value: `ansible-data`, `ansible-local-data` and `storage/specs`
+  all drop `:redis/storage-credentials`. `secret-errors` skips the
+  operator's pair when storage is managed. The SDK's
+  `ansible/ansible-with-spec` takes no environment, which is why
+  `run-play` exists; it mirrors that function's build, delete and create
+  behaviour, host-key handling and recap parsing.
+- **The create DAG on AWS is start, infrastructure, storage, ssh-config,
+  ansible, acceptance. The delete DAG is start, load-infrastructure,
+  ansible, ssh-config, infrastructure, storage, backend-finalize.** The
+  bucket outlives the machine the way the keypair does, so the last backup
+  timer run cannot fail against a missing bucket, and the managed S3 state
+  bucket (`s3-bucket-mode: managed`) goes last because every other stage's
+  state lives in it. A repeat delete must exit 0: inspection reporting the
+  compute destroyed or absent sets `:redis/already-destroyed` and `next-fn`
+  routes to storage and then the finalizer; an inspection error under a
+  managed backend sets `:redis/finalize-only` and routes straight to the
+  finalizer, which proves absence or owned retirement itself. An error with
+  nothing managed stays an error: a failed read never means absence.
+- **Rehearse reads the pair back from storage state** (`read-credentials!`)
+  because it runs a play without converging the stage; describe reads
+  nothing. AWS credentials come from the ambient chain, or from
+  `COLORS_PAR_AWS_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY` and `_SESSION_TOKEN`
+  overlaid onto `AWS_*` by `storage/aws-env` for tofu, the AWS CLI, the
+  library's orchestration and inspection, and the finalizer.
+- **AWS renders differently from the other two providers, by design.** The
+  library owns a VPC, a subnet and a security group on AWS because an
+  instance cannot exist without them, so the node carries a `vpc_ip` nothing
+  in this package reads; and the key pair is registered from a public key in
+  both SSH modes, so `shared-keygen.tf.json` exists for the opt-out fixture
+  too. `scripts/compute-contract.py` encodes both.
 ## Verbs beyond the lifecycle
 
 `rehearse` takes a fresh set, restores the newest completed one into a
@@ -80,21 +136,24 @@ dry-run render `/home/build-placeholder/.ssh/<profile>` rather than reading
 ## Commands
 
 ```sh
-bb test
-bb golden                  # four fixtures: keygen and opt-out, per provider
-bb golden:accept           # only after reading the diff
-bb syntax                  # offline ansible-playbook --syntax-check + bash -n
-./scripts/launcher.sh
-./green build
-./green create --dry-run
-./green create             # requires explicit authorization
-./green rehearse           # against a live deployment
-./green describe
-./green delete             # guarded and destructive
+cd green && bb test
+cd green && bb golden      # six fixtures: keygen and opt-out on Vultr, DigitalOcean and AWS
+cd green && bb golden:accept   # only after reading the diff
+cd green && bb syntax      # offline ansible-playbook --syntax-check + bash -n
+./scripts/launcher.sh      # from the repository root
+./scripts/parity.sh        # every fixture through every colour that exists
+cd green && ./green build
+cd green && ./green create --dry-run
+cd green && ./green create     # requires explicit authorization
+cd green && ./green rehearse   # against a live deployment
+cd green && ./green describe
+cd green && ./green delete     # guarded and destructive
 ```
 
 `bb syntax` and the acceptance gate need the devenv toolchain (`direnv
-allow`): ansible-playbook and redis-cli come from it.
+allow`): ansible-playbook and redis-cli come from it. The AWS fixtures
+build and dry-run without credentials like the others; the opt-out one
+names a public key file the build never opens.
 
 Never read `.envrc.private`, edit `.colors/`, export `COLORS_PAR_PROFILE`, or
 weaken `compute-prevent-destroy`. Build and dry-run are credential-free and
@@ -102,11 +161,14 @@ must not touch `~/.ssh`.
 
 ## Coupling
 
-`deps.edn` pins Green and colors-compute. Provider support changes belong in
-colors-compute and reach Redis through a library version bump. Use
-`GREEN_LIB_ROOT`, `COLORS_COMPUTE_LIB_ROOT` and `REDIS_LIB_ROOT` for development.
-`bb pin` stamps the payload from a clean pushed HEAD; deployment launchers are
-copies, not symlinks.
+`green/deps.edn` pins Green and colors-compute. Provider support changes
+belong in colors-compute and reach Redis through a library version bump; the
+managed S3 backend (`compute-managed-backend`) and AWS arrived with the pin
+at `09ec539`. Use `GREEN_LIB_ROOT`, `COLORS_COMPUTE_LIB_ROOT` and
+`REDIS_LIB_ROOT` for development; `REDIS_LIB_ROOT` names the repository root
+and the launcher adds `green` itself, the way `NEON_LIB_ROOT` works. `bb pin`
+(from `green/`) stamps the payload from a clean pushed HEAD; deployment
+launchers are copies, not symlinks.
 
 ## Documentation
 

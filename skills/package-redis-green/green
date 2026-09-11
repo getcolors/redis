@@ -1,7 +1,11 @@
 #!/usr/bin/env bb
-;; Redis launcher — one Redis 7.2 server on one Vultr instance or DigitalOcean
-;; droplet, published on loopback only, reached over an SSH tunnel, with RDB
-;; backup sets in Cloudflare R2.
+;; Redis launcher: one Redis 7.2 server on one Vultr instance, DigitalOcean
+;; droplet or AWS EC2 instance, published on loopback only, reached over an SSH
+;; tunnel, with RDB backup sets in Cloudflare R2 or a deployment-owned S3 bucket.
+;;
+;; This file is both the skill payload and the repository entry point: green/green
+;; in the repository is a symlink to it. REDIS_LIB_ROOT names the repository
+;; root; the green implementation lives under its green/ directory.
 ;;
 ;; Desired state lives in colors.yml. Secrets are supplied only through
 ;; COLORS_PAR_* environment variables. COLORS_PAR_PROFILE is always refused.
@@ -41,7 +45,7 @@
 
 (def ^:private bootstrap-error
   (when (and (System/getProperty "babashka.version") (not resolved?))
-    (let [redis (lib-coord "REDIS_LIB_ROOT" redis-git-url redis-sha nil)
+    (let [redis (lib-coord "REDIS_LIB_ROOT" redis-git-url redis-sha "green")
           green (lib-coord "GREEN_LIB_ROOT" green-git-url nil nil)
           compute (lib-coord "COLORS_COMPUTE_LIB_ROOT" compute-git-url nil "green")]
       (if-not redis

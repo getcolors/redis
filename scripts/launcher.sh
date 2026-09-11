@@ -9,6 +9,7 @@ ok(){ checks=$((checks+1)); echo "  ok — $*"; }
 
 [ -f "$launcher" ] || fail 'payload launcher is missing'
 grep -q 'io.github.getcolors.redis.workflow/workflow' "$launcher" || fail 'workflow dispatch is missing'
+grep -q '(lib-coord "REDIS_LIB_ROOT" redis-git-url redis-sha "green")' "$launcher" || fail 'the redis coordinate must carry :deps/root green'
 for bad in 'defn.*-step' 'tofu/' 'ansible/'; do
   ! grep -qE "$bad" "$launcher" || fail "launcher contains package logic: $bad"
 done
@@ -52,6 +53,7 @@ for verb in build create delete rehearse describe; do
 done
 ok 'lifecycle, rehearsal and describe commands are dispatchable'
 
-[ -L "$root/green" ] && [ "$(readlink "$root/green")" = skills/package-redis-green/green ] || fail 'root green is not the payload symlink'
-ok 'root launcher is the payload symlink'
+[ -L "$root/green/green" ] && [ "$(readlink "$root/green/green")" = ../skills/package-redis-green/green ] || fail 'green/green is not the payload symlink'
+[ ! -e "$root/green" ] || [ -d "$root/green" ] || fail 'the repository root must carry no launcher of its own'
+ok 'green/green is the payload symlink and the root carries no launcher'
 echo "launcher: $checks checks passed"

@@ -1,0 +1,31 @@
+[
+  {
+    "address": "vultr_firewall_group.redis",
+    "keys": [
+      null
+    ],
+    "kind": "single"
+  },
+  {
+    "address": "vultr_firewall_rule.ssh",
+    "keys": [
+      "0.0.0.0/0",
+      "::/0"
+    ],
+    "kind": "for_each"
+  },
+  {
+    "address": "vultr_instance.redis",
+    "keys": [
+      null
+    ],
+    "kind": "single"
+  },
+  {
+    "address": "vultr_ssh_key.machine",
+    "keys": [
+      null
+    ],
+    "kind": "single"
+  }
+]

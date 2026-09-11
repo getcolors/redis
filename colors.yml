@@ -5,13 +5,18 @@
 # Required credentials (the compute one follows provider-compute):
 #   Vultr            COLORS_PAR_VULTR_API_KEY
 #   DigitalOcean     COLORS_PAR_DO_TOKEN
+#   AWS              the ambient AWS credential chain, or optionally
+#                    COLORS_PAR_AWS_ACCESS_KEY_ID, COLORS_PAR_AWS_SECRET_ACCESS_KEY
+#                    and COLORS_PAR_AWS_SESSION_TOKEN overlaid onto AWS_*
 #   state in R2      COLORS_PAR_R2_ACCESS_KEY_ID
 #                    COLORS_PAR_R2_SECRET_ACCESS_KEY
-#                    (the tofu-state bucket; reaches no host)
+#                    (the tofu-state bucket; reaches no host; an S3 state
+#                    bucket uses the AWS chain instead)
 #   backups in R2    COLORS_PAR_REDIS_BACKUP_R2_ACCESS_KEY_ID
 #                    COLORS_PAR_REDIS_BACKUP_R2_SECRET_ACCESS_KEY
 #                    (Object Read & Write on the backup bucket ONLY; the one
-#                    pair that reaches the host)
+#                    pair that reaches the host; not read when the package
+#                    owns the bucket, see redis-storage-managed)
 #
 # There is no DNS provider and no public Redis port: Redis is published on
 # loopback only, the firewall opens 22 alone, and the client path is an SSH
@@ -23,10 +28,15 @@
 profile: redis-example
 workdir: .colors
 
-# vultr or digitalocean. Switching on a profile that already holds a machine
-# is refused: set it back, delete, then create on the new provider.
+# vultr, digitalocean or aws. Switching on a profile that already holds a
+# machine is refused: set it back, delete, then create on the new provider.
 provider-compute: vultr
 provider-backend: r2
+
+# false: the backup bucket below already exists and the operator holds its
+# scoped pair. true (AWS only, with s3-bucket-mode managed): the package owns
+# the bucket in its redis-storage stage and mints the scoped pair itself.
+redis-storage-managed: false
 
 # Preserve this guard in committed desired state. Destruction requires an
 # explicitly authorized one-run override; never edit this flag to bypass it.
@@ -97,7 +107,39 @@ vultr-ssh-sources:
 # No digitalocean-name and no digitalocean-ssh-keys, for the same reasons as
 # their Vultr counterparts.
 
+# --- AWS (read when provider-compute: aws) ------------------------------------
+
+# The same deployment on an EC2 instance. AWS has no VPC-less instance, so the
+# library creates a VPC, a public subnet and a security group (22 only) for
+# it; nothing in this package reads the private address. Keygen mode is the
+# default here too; aws-ssh-authorized-keys naming an operator .pub file
+# selects opt-out mode, and the build never opens the file. With a managed
+# backup bucket the state backend must be s3 in managed mode and the backup
+# keys must name the same region:
+#
+# provider-compute: aws
+# provider-backend: s3
+# redis-storage-managed: true
+# aws-region: us-east-1
+# aws-availability-zone: us-east-1a
+# aws-image-id: ami-025d99823a4caad37
+# aws-instance-type: t3.small
+# aws-vpc-cidr: 10.79.0.0/16
+# aws-subnet-cidr: 10.79.1.0/24
+# aws-root-volume-size-gb: 20
+# redis-ssh-sources:
+#   - 0.0.0.0/0
+# redis-backup-r2-bucket: redis-example-backup
+# redis-backup-r2-endpoint: https://s3.us-east-1.amazonaws.com
+# redis-backup-r2-region: us-east-1
+# s3-bucket: redis-example-state
+# s3-region: us-east-1
+# s3-bucket-mode: managed
+
 # --- OpenTofu state backend ---------------------------------------------------
 
+# R2 (provider-backend: r2). For S3 see the AWS block: s3-bucket, s3-region and
+# s3-bucket-mode (external by default; managed lets the library create the
+# bucket on the first create and finalize it at the end of delete).
 r2-bucket: tofu-state-319271fed8bc6d2d9059362be1165f37-eu
 r2-endpoint: https://319271fed8bc6d2d9059362be1165f37.eu.r2.cloudflarestorage.com

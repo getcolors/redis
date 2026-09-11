@@ -1,0 +1,11 @@
+{
+  "terraform" : {
+    "backend" : {
+      "s3" : {
+        "bucket" : "redis-aws-fixture-state",
+        "key" : "redis-aws-fixture/redis-storage.tfstate",
+        "region" : "us-east-1"
+      }
+    }
+  }
+}

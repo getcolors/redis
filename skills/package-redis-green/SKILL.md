@@ -1,19 +1,21 @@
 ---
 name: package-redis-green
-description: Provision and manage one Redis 7.2 server on one Vultr instance or DigitalOcean droplet — published on loopback only, reached over an SSH tunnel, with an append-only file for persistence and RDB backup sets in Cloudflare R2 that a rehearsal verb restores and reads back — using OpenTofu and Ansible. Use when asked to deploy, converge, back up, rehearse recovery for, inspect or tear down a single-node Redis, or to work on a colors.yml for a redis deployment.
+description: Provision and manage one Redis 7.2 server on one Vultr instance, DigitalOcean droplet or AWS EC2 instance, published on loopback only, reached over an SSH tunnel, with an append-only file for persistence and RDB backup sets in Cloudflare R2 or a deployment-owned S3 bucket that a rehearsal verb restores and reads back, using OpenTofu and Ansible. Use when asked to deploy, converge, back up, rehearse recovery for, inspect or tear down a single-node Redis, or to work on a colors.yml for a redis deployment.
 ---
 
 # Redis Package Skill (Green)
 
-Provisions one machine on **Vultr or DigitalOcean** (`provider-compute`)
+Provisions one machine on **Vultr, DigitalOcean or AWS** (`provider-compute`)
 and converges **Redis 7.2** on it as one Docker Compose service:
 `maxmemory-policy noeviction`, an append-only file (`appendfsync everysec`)
 on a named volume, a password generated on the host, published on
-`127.0.0.1` and nowhere else. No private network is created on either
-provider. The provider firewall opens **22 only**; the client path is an SSH
-tunnel through the `~/.ssh/config` alias the package writes. RDB snapshot
-sets go to Cloudflare R2 with a completion protocol, and `rehearse` proves
-one of them restores.
+`127.0.0.1` and nowhere else. The package creates no private network of its
+own; on AWS the library owns the VPC an instance cannot exist without. The
+provider firewall opens **22 only**; the client path is an SSH tunnel
+through the `~/.ssh/config` alias the package writes. RDB snapshot sets go
+to an S3-compatible bucket (Cloudflare R2, or on AWS a bucket the
+deployment owns) with a completion protocol, and `rehearse` proves one of
+them restores.
 
 ## Install the launcher
 
@@ -35,7 +37,7 @@ after every update or the project keeps running the old pin.
 ./green create             # converge for real; the gates run inside it
 ./green rehearse           # fresh backup set, restore it into a scratch instance, read it back
 ./green describe           # the host's last monitor result, over SSH
-./green delete             # guarded by compute-prevent-destroy; removes nothing in R2
+./green delete             # guarded by compute-prevent-destroy; a managed bucket goes after the machine, an operator-owned one is untouched
 ```
 
 `build` and `--dry-run` work on a fresh checkout with an empty environment.
@@ -65,8 +67,9 @@ Only the selected provider's credential is required.
 |---|---|
 | `COLORS_PAR_VULTR_API_KEY` | `provider-compute: vultr` — the firewall group, the instance, the account SSH key |
 | `COLORS_PAR_DO_TOKEN` | `provider-compute: digitalocean` — the firewall, the droplet, the account SSH key |
-| `COLORS_PAR_R2_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` | OpenTofu state only; reaches no host |
-| `COLORS_PAR_REDIS_BACKUP_R2_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` | the backup sets — the one pair that reaches the host; Object Read & Write on the backup bucket only |
+| `COLORS_PAR_AWS_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` / `_SESSION_TOKEN` | `provider-compute: aws`, optional: overlaid onto `AWS_*` for OpenTofu and the AWS CLI. Absent, the ambient AWS credential chain is used |
+| `COLORS_PAR_R2_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` | OpenTofu state in R2 only; reaches no host. An S3 state bucket uses the AWS chain |
+| `COLORS_PAR_REDIS_BACKUP_R2_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` | the backup sets, the one pair that reaches the host; Object Read & Write on the backup bucket only. Not required with `redis-storage-managed: true`: the package creates that pair and hands it to Ansible itself |
 
 The Redis password is generated on the host during convergence and read
 over SSH: `ssh <profile> cat /etc/redis/secrets/password`. It is never
@@ -76,7 +79,8 @@ operator-supplied.
 
 | Stage | What it manages |
 |---|---|
-| `redis-infrastructure` | one Vultr instance or one DigitalOcean droplet, a provider firewall opening 22 only, and in keygen mode the account SSH key named after the profile; the shared library renders separate shared/node documents and records provider ownership |
+| `redis-infrastructure` | one Vultr instance, one DigitalOcean droplet or one AWS EC2 instance, a provider firewall opening 22 only, and in keygen mode the account SSH key named after the profile; the shared library renders separate shared/node documents and records provider ownership |
+| `redis-storage` | only with `redis-storage-managed: true` on AWS: the backup bucket named by `redis-backup-r2-bucket` with public access blocked and AES256 encryption, one IAM user `<profile>-storage-backup` scoped to that bucket, and one access key as a sensitive output |
 | `redis-ssh-config` | the `~/.ssh/config` block, so `ssh <profile>` works |
 | `redis-ansible` | Docker Compose with the pinned image, the generated password, the smoke gate, the backup and monitor timers, and the first backup set |
 | acceptance | the operator path from the workstation: an SSH tunnel through the generated alias, a `SET`/`GET` round-trip with the generated password, an unauthenticated `PING` refused, a wrong password refused, and the public address **not** answering on the Redis port |
@@ -107,6 +111,20 @@ count, and the `.complete` marker last, after the uploaded bytes were read
 back and hashed. Sets older than `redis-backup-retention-days` are pruned
 while a newer completed set exists.
 
+### The managed backup bucket on AWS
+
+With `provider-compute: aws`, `redis-storage-managed: true` makes the
+deployment own its backup bucket. The `redis-storage` stage creates the
+bucket named by `redis-backup-r2-bucket`, blocks public access, enables
+AES256 encryption, and creates one IAM user and access key scoped to that
+bucket. The package reads the pair back from the stage output and hands it
+to the converge and the rehearsal as `COLORS_PAR_REDIS_BACKUP_R2_ACCESS_KEY_ID`
+and `_SECRET_ACCESS_KEY`, so no backup credential is ever operator-supplied
+and none appears in generated output. The managed bucket requires
+`provider-backend: s3` with `s3-bucket-mode: managed`, `redis-backup-r2-region`
+equal to `s3-region`, `redis-backup-r2-endpoint` equal to
+`https://s3.<region>.amazonaws.com`, and a bucket name without dots.
+
 `./green rehearse` takes a fresh set, restores the newest completed one into
 a scratch container of the pinned image (`--appendonly no`, so the RDB is
 what loads — a Redis 7 started with AOF on and no `appendonlydir/` ignores
@@ -134,7 +152,10 @@ The pinned colors-compute library selects providers and validates their
 settings. This package passes a singleton topology and an SSH-only policy;
 it has no compute provider registry or templates. New provider support arrives
 through a library version bump. Vultr remains the default, and fixtures cover
-Vultr and DigitalOcean in both SSH modes.
+Vultr, DigitalOcean and AWS in both SSH modes. On AWS the library owns a VPC,
+a subnet and a security group, and registers the SSH key pair from a public
+key in both modes: keygen registers the key the package generates, opt-out
+registers the operator's `aws-ssh-authorized-keys` file.
 
 State is remote in S3 or R2, split into shared and node objects under
 `<profile>/compute/`. The ownership journal prevents conflicting operations.

@@ -1,7 +1,8 @@
-# Shared runtime preamble for the R2 scripts. Sourced, never executed.
+# Shared runtime preamble for the backup scripts. Sourced, never executed.
 #
 # One rclone remote, `backup`, from the credential file the host holds at
-# /etc/colors/backup-r2.env. Adapted from the getcolors/langfuse package's
+# /etc/colors/backup-r2.env: Cloudflare R2, or native S3 when the endpoint
+# is an amazonaws.com host. Adapted from the getcolors/langfuse package's
 # r2-env.sh, whose flags are traps already paid for by the getcolors/neon
 # build and recorded in the neon-single-node Context Skill: without
 # no_check_bucket every upload is preceded by a CreateBucket the token denies
@@ -14,6 +15,11 @@ export RCLONE_CONFIG=/dev/null
 export RCLONE_CONFIG_BACKUP_TYPE=s3 RCLONE_CONFIG_BACKUP_PROVIDER=Cloudflare
 export RCLONE_CONFIG_BACKUP_ENDPOINT="https://fixture.r2.cloudflarestorage.com" RCLONE_CONFIG_BACKUP_REGION="auto"
 export RCLONE_CONFIG_BACKUP_NO_CHECK_BUCKET=true RCLONE_CONFIG_BACKUP_NO_HEAD=true
+# An amazonaws.com endpoint is native S3 (the deployment-owned bucket on AWS):
+# rclone's AWS provider signs for it; the two skips above still hold.
+case "$RCLONE_CONFIG_BACKUP_ENDPOINT" in
+  https://*.amazonaws.com|https://*.amazonaws.com/|https://*.amazonaws.com.cn|https://*.amazonaws.com.cn/) export RCLONE_CONFIG_BACKUP_PROVIDER=AWS ;;
+esac
 if [ -f /etc/colors/backup-r2.env ]; then
   RCLONE_CONFIG_BACKUP_ACCESS_KEY_ID=$(sed -n 's/^BACKUP_R2_ACCESS_KEY_ID=//p' /etc/colors/backup-r2.env)
   RCLONE_CONFIG_BACKUP_SECRET_ACCESS_KEY=$(sed -n 's/^BACKUP_R2_SECRET_ACCESS_KEY=//p' /etc/colors/backup-r2.env)

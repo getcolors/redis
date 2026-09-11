@@ -1,20 +1,27 @@
 # redis
 
-A green (Clojure/Babashka) Package Skill that provisions **one Redis 7.2
-server on one Vultr instance or one DigitalOcean droplet**: one Docker
+A Package Skill that provisions **one Redis 7.2 server on one Vultr
+instance, one DigitalOcean droplet or one AWS EC2 instance**: one Docker
 Compose service with `maxmemory-policy noeviction`, an append-only file on a
 named volume, a password generated on the host, published on loopback and
-nowhere else. RDB backup sets go to Cloudflare R2 with a completion
-protocol, and `./green rehearse` proves one of them restores.
+nowhere else. RDB backup sets go to an S3-compatible bucket (Cloudflare R2,
+or on AWS a bucket the deployment owns) with a completion protocol, and
+`./green rehearse` proves one of them restores.
 
-Nothing is published beyond loopback and no private network is created. The
-provider firewall opens **22 only**, there is no DNS record, and the
-supported client path is an SSH tunnel through the `~/.ssh/config` alias the
-package writes. Compute is supplied by the pinned colors-compute library;
-Vultr and DigitalOcean fixtures cover the existing configurations. Provider
-selection, credentials, SSH key ownership and S3/R2 state are library concerns.
-Legacy `<profile>/redis-infrastructure.tfstate` deployments require explicit
-migration; unreadable or foreign state never becomes a fresh deployment.
+The green (Clojure/Babashka) implementation lives in `green/`; the repository
+carries the tri-colour layout so that red (TypeScript/Bun) and blue
+(Python/uv) ports can land beside it as byte-identical siblings.
+
+Nothing is published beyond loopback and the package creates no private
+network of its own (on AWS the library owns the VPC an instance cannot exist
+without). The provider firewall opens **22 only**, there is no DNS record,
+and the supported client path is an SSH tunnel through the `~/.ssh/config`
+alias the package writes. Compute is supplied by the pinned colors-compute
+library; fixtures cover Vultr, DigitalOcean and AWS in both SSH key modes.
+Provider selection, credentials, SSH key ownership and S3/R2 state are
+library concerns. Legacy `<profile>/redis-infrastructure.tfstate` deployments
+require explicit migration; unreadable or foreign state never becomes a
+fresh deployment.
 
 ## Install
 
@@ -53,11 +60,38 @@ Credentials are `COLORS_PAR_*` environment variables in a gitignored
 |---|---|
 | `COLORS_PAR_VULTR_API_KEY` | compute, with `provider-compute: vultr` |
 | `COLORS_PAR_DO_TOKEN` | compute, with `provider-compute: digitalocean` |
-| `COLORS_PAR_R2_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` | OpenTofu state (operator machine only) |
-| `COLORS_PAR_REDIS_BACKUP_R2_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` | the backup sets — the one pair that reaches the host; scope it to the backup bucket |
+| `COLORS_PAR_AWS_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` / `_SESSION_TOKEN` | optional with `provider-compute: aws`; overlaid onto `AWS_*` for OpenTofu and the AWS CLI, which otherwise use the ambient credential chain |
+| `COLORS_PAR_R2_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` | OpenTofu state in R2 (operator machine only); an S3 state bucket uses the AWS chain |
+| `COLORS_PAR_REDIS_BACKUP_R2_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` | the backup sets, the one pair that reaches the host; scope it to the backup bucket. Not needed with `redis-storage-managed: true`: the package mints that pair itself |
 
 There is no DNS credential because there is no DNS. The Redis password is
 generated on the server during convergence and is never operator-supplied.
+
+### AWS with a managed backup bucket
+
+On AWS the deployment can own its backup bucket. With
+`redis-storage-managed: true` the package adds a `redis-storage` stage that
+creates the bucket named by `redis-backup-r2-bucket`, blocks public access,
+turns on AES256 encryption, and creates one IAM user scoped to that bucket
+with one access key. The pair is a sensitive OpenTofu output: the package
+reads it back and hands it to the converge and the rehearsal under the same
+`COLORS_PAR_REDIS_BACKUP_R2_*` names an operator would export, so no backup
+credential ever appears in `.envrc.private`, in `colors.yml`, or in generated
+output. The managed bucket requires `provider-backend: s3` with
+`s3-bucket-mode: managed`, and the region and endpoint keys must name the
+same AWS region as the state bucket:
+
+```yaml
+provider-compute: aws
+provider-backend: s3
+s3-bucket: <profile>-state
+s3-region: us-east-1
+s3-bucket-mode: managed
+redis-storage-managed: true
+redis-backup-r2-bucket: <profile>-backup
+redis-backup-r2-endpoint: https://s3.us-east-1.amazonaws.com
+redis-backup-r2-region: us-east-1
+```
 
 Never export `COLORS_PAR_PROFILE`: the profile keys remote state, and
 overlaying it points one deployment at another's.
@@ -102,13 +136,25 @@ and writes `<profile>/.colors-recovery-verified`.
 `delete` is protected by `compute-prevent-destroy: true`. Lift it for one
 run with `COLORS_PAR_COMPUTE_PREVENT_DESTROY=false ./green delete`; never
 edit the committed flag. The `~/.ssh/config` block is removed before the
-destroy, the machine keypair after it, and the backup sets in R2 not at all.
+destroy, the machine keypair after it, and the backup sets in an
+operator-owned bucket not at all.
+
+A managed backup bucket is destroyed after the machine, with its sets
+(`force_destroy`), so the last backup timer run never fails against a
+missing bucket; a managed S3 state bucket is finalized last of all, once
+the library has proven it holds nothing but retired state. A repeat
+`delete` exits 0: with the machine already gone it continues with the
+storage stage and the finalizer, and with the state bucket already gone it
+goes straight to the finalizer, which proves the absence.
 
 ## Development
 
 ```sh
-bb test && bb golden && bb syntax
+cd green && bb test && bb golden && bb syntax
 ./scripts/launcher.sh
+./scripts/parity.sh
 ```
 
+Green is canonical. `scripts/parity.sh` renders every fixture and, once the
+red and blue ports land, diffs their trees against green's byte for byte.
 See `CLAUDE.md` for the traps this package has already paid for.

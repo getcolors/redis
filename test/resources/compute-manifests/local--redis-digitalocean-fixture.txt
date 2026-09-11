@@ -1,0 +1,23 @@
+[
+  {
+    "address": "digitalocean_droplet.redis",
+    "keys": [
+      null
+    ],
+    "kind": "single"
+  },
+  {
+    "address": "digitalocean_firewall.redis",
+    "keys": [
+      null
+    ],
+    "kind": "single"
+  },
+  {
+    "address": "digitalocean_ssh_key.machine",
+    "keys": [
+      null
+    ],
+    "kind": "single"
+  }
+]

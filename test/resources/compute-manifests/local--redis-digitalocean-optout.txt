@@ -1,0 +1,16 @@
+[
+  {
+    "address": "digitalocean_droplet.redis",
+    "keys": [
+      null
+    ],
+    "kind": "single"
+  },
+  {
+    "address": "digitalocean_firewall.redis",
+    "keys": [
+      null
+    ],
+    "kind": "single"
+  }
+]

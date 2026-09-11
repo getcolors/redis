@@ -1,0 +1,12 @@
+{
+  "terraform": {
+    "backend": {
+      "s3": {
+        "bucket": "redis-aws-optout-state",
+        "key": "redis-aws-optout/compute/nodes/0.tfstate",
+        "region": "us-east-1",
+        "use_lockfile": true
+      }
+    }
+  }
+}

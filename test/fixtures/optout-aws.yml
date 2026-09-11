@@ -1,0 +1,28 @@
+# AWS opt-out fixture: an operator public key file, so the package creates no
+# keypair (build never opens the file), an operator-owned backup bucket and
+# an external state bucket, so there is no storage stage and no finalizer.
+profile: redis-aws-optout
+workdir: WORKDIR
+provider-compute: aws
+provider-backend: s3
+compute-prevent-destroy: true
+redis-image: docker.io/library/redis:7.2.16@sha256:74566c6910d13ae61e7ce73ebd3127438a1fe805b309b097c323142719ec8a5b
+redis-port: 6379
+redis-backup-r2-bucket: redis-aws-optout-backup
+redis-backup-r2-endpoint: https://s3.us-east-1.amazonaws.com
+redis-backup-r2-region: us-east-1
+redis-backup-oncalendar: "*-*-* 00/6:00:00"
+redis-backup-retention-days: 7
+redis-backup-max-age-hours: 8
+aws-region: us-east-1
+aws-availability-zone: us-east-1a
+aws-image-id: ami-025d99823a4caad37
+aws-instance-type: t3.small
+aws-vpc-cidr: 10.79.0.0/16
+aws-subnet-cidr: 10.79.1.0/24
+aws-root-volume-size-gb: 20
+aws-ssh-authorized-keys: ~/.ssh/id_ed25519.pub
+redis-ssh-sources:
+  - 0.0.0.0/0
+s3-bucket: redis-aws-optout-state
+s3-region: us-east-1

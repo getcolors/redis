@@ -1,0 +1,292 @@
+{
+  "baseline_revision": "c18449f0d7a136af0e341505f4c52743899d75fa",
+  "capture_policy": "fresh build in temporary workdir; no golden or .colors edits; no automatic baseline replacement",
+  "initial_dirty_paths": [],
+  "overlay_validation": {
+    "contract": "validate fully merged inputs through current pinned ONCE; future-provider support may fail until later work packages",
+    "status": "pending"
+  },
+  "planned_provider_overlays": {
+    "aws": {
+      "aws-availability-zone": "eu-west-1a",
+      "aws-image-id": "ami-example",
+      "aws-instance-type": "t3.small",
+      "aws-region": "eu-west-1",
+      "aws-root-volume-size-gb": 30,
+      "aws-ssh-sources": [
+        "0.0.0.0/0"
+      ],
+      "aws-subnet-cidr": "10.0.1.0/24",
+      "aws-vpc-cidr": "10.0.0.0/16"
+    },
+    "azure": {
+      "azure-boot-disk-size-gb": 30,
+      "azure-image-offer": "ubuntu-24_04-lts",
+      "azure-image-publisher": "Canonical",
+      "azure-image-sku": "server-arm64",
+      "azure-image-version": "24.04.202608020",
+      "azure-location": "swedencentral",
+      "azure-resource-group": "colors-fixture",
+      "azure-ssh-sources": [
+        "0.0.0.0/0",
+        "::/0"
+      ],
+      "azure-subnet-cidr": "10.10.1.0/24",
+      "azure-subscription-id": "00000000-0000-0000-0000-000000000000",
+      "azure-vm-size": "Standard_D2pls_v6",
+      "azure-vnet-cidr": "10.10.0.0/16"
+    },
+    "digitalocean": {
+      "digitalocean-image": "ubuntu-24-04-x64",
+      "digitalocean-region": "ams3",
+      "digitalocean-size": "s-2vcpu-8gb",
+      "digitalocean-ssh-sources": [
+        "0.0.0.0/0",
+        "::/0"
+      ]
+    },
+    "google": {
+      "google-boot-disk-size-gb": 30,
+      "google-image-family": "ubuntu-2404-lts-arm64",
+      "google-image-id": "projects/ubuntu-os-cloud/global/images/ubuntu-example",
+      "google-image-project": "ubuntu-os-cloud",
+      "google-machine-type": "t2a-standard-1",
+      "google-project": "colors-fixture",
+      "google-region": "europe-west4",
+      "google-ssh-sources": [
+        "0.0.0.0/0"
+      ],
+      "google-subnet-cidr": "10.20.1.0/24",
+      "google-zone": "europe-west4-b"
+    },
+    "hcloud": {
+      "hcloud-image": "ubuntu-24.04",
+      "hcloud-location": "hel1",
+      "hcloud-server-type": "cx23",
+      "hcloud-ssh-sources": [
+        "0.0.0.0/0",
+        "::/0"
+      ]
+    },
+    "oci": {
+      "oci-availability-domain": "XquT:EU-FRANKFURT-1-AD-1",
+      "oci-boot-volume-size-in-gbs": 100,
+      "oci-boot-volume-vpus-per-gb": 30,
+      "oci-compartment-id": "ocid1.tenancy.oc1..aaaaaaaafixturecompartment",
+      "oci-config-file-profile": "DEFAULT",
+      "oci-memory-in-gbs": 12,
+      "oci-ocpus": 2,
+      "oci-shape": "VM.Standard.A2.Flex",
+      "oci-subnet-id": "ocid1.subnet.oc1.eu-frankfurt-1.aaaaaaaafixturesubnet"
+    },
+    "vultr": {
+      "vultr-os-id": 2284,
+      "vultr-plan": "vc2-2c-4gb",
+      "vultr-region": "ams",
+      "vultr-ssh-sources": [
+        "0.0.0.0/0",
+        "::/0"
+      ]
+    },
+    "yandex": {
+      "yandex-cloud-id": "b1gfixturecloud",
+      "yandex-core-fraction": 100,
+      "yandex-cores": 2,
+      "yandex-disk-size-gb": 50,
+      "yandex-folder-id": "b1gfixturefolder",
+      "yandex-image-family": "ubuntu-2404-lts",
+      "yandex-memory-gb": 8,
+      "yandex-platform-id": "standard-v3",
+      "yandex-subnet-cidr": "10.0.0.0/24",
+      "yandex-zone": "ru-central1-a"
+    }
+  },
+  "repository": "redis",
+  "rows": [
+    {
+      "backend": "local",
+      "base_fixture": "test/fixtures/colors-digitalocean.yml",
+      "baseline_revision": "c18449f0d7a136af0e341505f4c52743899d75fa",
+      "command": [
+        "{repo}/green/green",
+        "build",
+        "-f",
+        "{fixture}"
+      ],
+      "compute_stage": "redis-infrastructure",
+      "cwd": "{repo}/green",
+      "environment": {
+        "REDIS_LIB_ROOT": "{repo}"
+      },
+      "golden_compute_directory": "test/resources/golden/local/redis-digitalocean-fixture/redis-infrastructure",
+      "id": "local--redis-digitalocean-fixture",
+      "key_mode": "keygen",
+      "overlay": {},
+      "profile": "redis-digitalocean-fixture",
+      "provider": "digitalocean",
+      "rendered_compute_files": {
+        "backend.tf.json": "51b7c2d534e800e6ed4c4b9bd698b1980ef7dd4c38b2d4523c85209b9c996049",
+        "main.tf": "5f2dd7be5038b761af294907cb8fc1c19693b4543aee7433604a2c11dc3a0247"
+      },
+      "rendered_files": [
+        "redis-ansible-local/ansible.cfg",
+        "redis-ansible-local/inventory.ini",
+        "redis-ansible-local/main.yml",
+        "redis-ansible/ansible.cfg",
+        "redis-ansible/cleanup.yml",
+        "redis-ansible/compose.yml",
+        "redis-ansible/inventory.json",
+        "redis-ansible/main.yml",
+        "redis-ansible/r2-env.sh",
+        "redis-ansible/redis-backup.sh",
+        "redis-ansible/redis-monitor.sh",
+        "redis-ansible/redis-restore-check.sh",
+        "redis-ansible/redis-smoke.sh",
+        "redis-ansible/redis-status.sh",
+        "redis-ansible/rehearsal.yml",
+        "redis-infrastructure/backend.tf.json",
+        "redis-infrastructure/main.tf"
+      ],
+      "status": "captured"
+    },
+    {
+      "backend": "local",
+      "base_fixture": "test/fixtures/optout-digitalocean.yml",
+      "baseline_revision": "c18449f0d7a136af0e341505f4c52743899d75fa",
+      "command": [
+        "{repo}/green/green",
+        "build",
+        "-f",
+        "{fixture}"
+      ],
+      "compute_stage": "redis-infrastructure",
+      "cwd": "{repo}/green",
+      "environment": {
+        "REDIS_LIB_ROOT": "{repo}"
+      },
+      "golden_compute_directory": "test/resources/golden/local/redis-digitalocean-optout/redis-infrastructure",
+      "id": "local--redis-digitalocean-optout",
+      "key_mode": "optout",
+      "overlay": {},
+      "profile": "redis-digitalocean-optout",
+      "provider": "digitalocean",
+      "rendered_compute_files": {
+        "backend.tf.json": "51b7c2d534e800e6ed4c4b9bd698b1980ef7dd4c38b2d4523c85209b9c996049",
+        "main.tf": "1e6eb925e6f330a6b07bc9246dc1430bde1fee8161521f8cd23967d30f1e5839"
+      },
+      "rendered_files": [
+        "redis-ansible-local/ansible.cfg",
+        "redis-ansible-local/inventory.ini",
+        "redis-ansible-local/main.yml",
+        "redis-ansible/ansible.cfg",
+        "redis-ansible/cleanup.yml",
+        "redis-ansible/compose.yml",
+        "redis-ansible/inventory.json",
+        "redis-ansible/main.yml",
+        "redis-ansible/r2-env.sh",
+        "redis-ansible/redis-backup.sh",
+        "redis-ansible/redis-monitor.sh",
+        "redis-ansible/redis-restore-check.sh",
+        "redis-ansible/redis-smoke.sh",
+        "redis-ansible/redis-status.sh",
+        "redis-ansible/rehearsal.yml",
+        "redis-infrastructure/backend.tf.json",
+        "redis-infrastructure/main.tf"
+      ],
+      "status": "captured"
+    },
+    {
+      "backend": "local",
+      "base_fixture": "test/fixtures/colors.yml",
+      "baseline_revision": "c18449f0d7a136af0e341505f4c52743899d75fa",
+      "command": [
+        "{repo}/green/green",
+        "build",
+        "-f",
+        "{fixture}"
+      ],
+      "compute_stage": "redis-infrastructure",
+      "cwd": "{repo}/green",
+      "environment": {
+        "REDIS_LIB_ROOT": "{repo}"
+      },
+      "golden_compute_directory": "test/resources/golden/local/redis-fixture/redis-infrastructure",
+      "id": "local--redis-fixture",
+      "key_mode": "keygen",
+      "overlay": {},
+      "profile": "redis-fixture",
+      "provider": "vultr",
+      "rendered_compute_files": {
+        "backend.tf.json": "51b7c2d534e800e6ed4c4b9bd698b1980ef7dd4c38b2d4523c85209b9c996049",
+        "main.tf": "42ca3ef9f9ab6ada5bd74be1742c2a35bbbef145ecdb7ce9929572e8830afa5d"
+      },
+      "rendered_files": [
+        "redis-ansible-local/ansible.cfg",
+        "redis-ansible-local/inventory.ini",
+        "redis-ansible-local/main.yml",
+        "redis-ansible/ansible.cfg",
+        "redis-ansible/cleanup.yml",
+        "redis-ansible/compose.yml",
+        "redis-ansible/inventory.json",
+        "redis-ansible/main.yml",
+        "redis-ansible/r2-env.sh",
+        "redis-ansible/redis-backup.sh",
+        "redis-ansible/redis-monitor.sh",
+        "redis-ansible/redis-restore-check.sh",
+        "redis-ansible/redis-smoke.sh",
+        "redis-ansible/redis-status.sh",
+        "redis-ansible/rehearsal.yml",
+        "redis-infrastructure/backend.tf.json",
+        "redis-infrastructure/main.tf"
+      ],
+      "status": "captured"
+    },
+    {
+      "backend": "local",
+      "base_fixture": "test/fixtures/optout.yml",
+      "baseline_revision": "c18449f0d7a136af0e341505f4c52743899d75fa",
+      "command": [
+        "{repo}/green/green",
+        "build",
+        "-f",
+        "{fixture}"
+      ],
+      "compute_stage": "redis-infrastructure",
+      "cwd": "{repo}/green",
+      "environment": {
+        "REDIS_LIB_ROOT": "{repo}"
+      },
+      "golden_compute_directory": "test/resources/golden/local/redis-optout-fixture/redis-infrastructure",
+      "id": "local--redis-optout-fixture",
+      "key_mode": "optout",
+      "overlay": {},
+      "profile": "redis-optout-fixture",
+      "provider": "vultr",
+      "rendered_compute_files": {
+        "backend.tf.json": "51b7c2d534e800e6ed4c4b9bd698b1980ef7dd4c38b2d4523c85209b9c996049",
+        "main.tf": "a50ca2966fcd97d91b3276d3f6aa5dff5515b6553e8bb73192aeba881de86011"
+      },
+      "rendered_files": [
+        "redis-ansible-local/ansible.cfg",
+        "redis-ansible-local/inventory.ini",
+        "redis-ansible-local/main.yml",
+        "redis-ansible/ansible.cfg",
+        "redis-ansible/cleanup.yml",
+        "redis-ansible/compose.yml",
+        "redis-ansible/inventory.json",
+        "redis-ansible/main.yml",
+        "redis-ansible/r2-env.sh",
+        "redis-ansible/redis-backup.sh",
+        "redis-ansible/redis-monitor.sh",
+        "redis-ansible/redis-restore-check.sh",
+        "redis-ansible/redis-smoke.sh",
+        "redis-ansible/redis-status.sh",
+        "redis-ansible/rehearsal.yml",
+        "redis-infrastructure/backend.tf.json",
+        "redis-infrastructure/main.tf"
+      ],
+      "status": "captured"
+    }
+  ],
+  "schema_version": 1
+}

@@ -1,0 +1,34 @@
+{
+  "name": "package-redis-red",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./red/src/index.ts"
+  },
+  "files": [
+    "red/src",
+    "red/resources"
+  ],
+  "peerDependencies": {
+    "red": "*",
+    "colors-compute-red": "*"
+  },
+  "peerDependenciesMeta": {
+    "red": {
+      "optional": true
+    },
+    "colors-compute-red": {
+      "optional": true
+    }
+  },
+  "scripts": {
+    "test": "cd red && bun test && bun run typecheck",
+    "typecheck": "cd red && bun run typecheck",
+    "parity": "./scripts/parity.sh"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "colors-compute-red": "github:getcolors/colors-compute#09ec539e75dc21c4dafb019eb8f9da276e695f6f"
+  }
+}
