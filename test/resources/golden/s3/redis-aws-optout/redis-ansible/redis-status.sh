@@ -3,6 +3,10 @@
 # recovery marker, the container, and how to connect. Prints where the
 # generated password lives, never the password itself.
 set -uo pipefail
+# Everything below reads root-only files and the Docker socket. The alias
+# logs in as root on the Vultr and DigitalOcean images and as ubuntu on the
+# AWS AMI; re-run under passwordless sudo when that is what we are.
+[ "$(id -u)" -eq 0 ] || exec sudo -n "$0" "$@"
 . /opt/colors/r2-env.sh
 PREFIX="backup:$BACKUP_BUCKET/$SET_PREFIX"
 echo "== monitor =="; cat /var/lib/colors/redis-monitor.json 2>/dev/null || echo "(no monitor result yet)"; echo
@@ -19,6 +23,6 @@ echo
 echo "== connect =="
 echo "from your workstation:"
 echo "  ssh -L 6379:127.0.0.1:6379 redis-aws-optout"
-echo "  REDISCLI_AUTH=\$(ssh redis-aws-optout cat /etc/redis/secrets/password) redis-cli -p 6379"
+echo "  REDISCLI_AUTH=\$(ssh redis-aws-optout sudo -n cat /etc/redis/secrets/password) redis-cli -p 6379"
 echo "the generated password lives on this host only:"
 echo "  /etc/redis/secrets/password"

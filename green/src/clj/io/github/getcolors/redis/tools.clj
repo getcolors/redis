@@ -278,12 +278,20 @@
   [ip port]
   ["bash" "-c" (str "timeout 5 bash -c 'exec 3<>/dev/tcp/" ip "/" port "'")])
 
+(def password-file "/etc/redis/secrets/password")
+
+(def remote-password-command
+  "Read the root-only password file as whoever the alias logs in as: root on
+  the Vultr and DigitalOcean images, `ubuntu` on the AWS AMI, where the
+  fallback to passwordless sudo is what makes the file readable. One remote
+  command string; ssh hands it to the login shell."
+  (str "cat " password-file " 2>/dev/null || sudo -n cat " password-file))
+
 (defn read-remote-password
   "The generated Redis password, read over SSH and held only in this process.
   Never merged into opts, never printed."
   [opts]
-  (let [r (run-quiet ["ssh" "-o" "BatchMode=yes" (ssh-config/host-alias opts)
-                      "cat" "/etc/redis/secrets/password"]
+  (let [r (run-quiet ["ssh" "-o" "BatchMode=yes" (ssh-config/host-alias opts) remote-password-command]
                      {} 20000)]
     (when (zero? (:exit r)) (str/trim (str (:out r))))))
 
