@@ -44,6 +44,16 @@
       (is (= 0 (:green/exit (storage/step opts))))))
   (is (= (aws-optout) (storage/read-credentials! (aws-optout)))))
 
+(deftest an-empty-state-is-recognised-across-opentofu-releases
+  (testing "OpenTofu 1.11.5 (the neon-multi-node-aws build)"
+    (is (storage/empty-state? {:exit 1 :err "No state file was found!\nState management commands require a state file. Run this command\n"})))
+  (testing "OpenTofu 1.12.5 (the redis-aws build), no bang and an Error: prefix"
+    (is (storage/empty-state? {:exit 1 :err "\nError: No state file was found\n\nState management commands require a state file. Run this command in a\n"})))
+  (testing "anything else fails closed: a failed read never means absence"
+    (is (not (storage/empty-state? {:exit 0 :err "" :out ""})))
+    (is (not (storage/empty-state? {:exit 1 :err "Error: error loading the remote state: AccessDenied\n"})))
+    (is (not (storage/empty-state? {:exit 2 :err "No state file was found!"})))))
+
 (defn- temp-workdir []
   (str (java.nio.file.Files/createTempDirectory "redis-test-" (make-array java.nio.file.attribute.FileAttribute 0))))
 

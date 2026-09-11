@@ -47,16 +47,26 @@
       (throw (ex-info "managed storage state operation failed" {})))
     (:out result)))
 
+(defn empty-state?
+  "A `tofu state list` result that means the stage has no state yet: exit 1
+  and the no-state message on stderr. OpenTofu 1.11 prints
+  `No state file was found!`, 1.12 prints `Error: No state file was found`;
+  the match is on the shared phrase, from uncoloured output. Anything else
+  fails closed: a failed state read never means absence."
+  [result]
+  (and (= 1 (:exit result))
+       (boolean (re-find #"No state file was found" (str (:err result))))))
+
 (defn ownership-preflight!
   "Refuse an existing bucket unless this stage already owns its address."
   [opts]
   (let [options {:dir (directory opts) :extra-env (aws-env opts)}]
     (checked ["tofu" "init" "-input=false" "-no-color"] options)
-    (let [state (process/run ["tofu" "state" "list"] options)
-          empty-state? (and (= 1 (:exit state)) (str/includes? (str (:err state)) "No state file was found!"))
-          _ (when-not (or (zero? (:exit state)) empty-state?)
+    (let [state (process/run ["tofu" "state" "list" "-no-color"] options)
+          no-state? (empty-state? state)
+          _ (when-not (or (zero? (:exit state)) no-state?)
               (throw (ex-info "managed storage state unavailable" {})))
-          addresses (set (str/split-lines (if empty-state? "" (:out state))))
+          addresses (set (str/split-lines (if no-state? "" (:out state))))
           recorded (if (empty? addresses) {}
                        (into {} (map (juxt :address #(get-in % [:values :bucket])))
                              (get-in (json/parse-string (checked ["tofu" "show" "-json"] options) true) [:values :root_module :resources])))
