@@ -72,7 +72,7 @@ Only the selected provider's credential is required.
 | `COLORS_PAR_REDIS_BACKUP_R2_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` | the backup sets, the one pair that reaches the host; Object Read & Write on the backup bucket only. Not required with `redis-storage-managed: true`: the package creates that pair and hands it to Ansible itself |
 
 The Redis password is generated on the host during convergence and read
-over SSH: `ssh <profile> cat /etc/redis/secrets/password`. It is never
+over SSH: `ssh <profile> sudo -n cat /etc/redis/secrets/password`. It is never
 operator-supplied.
 
 ## What it builds
@@ -140,7 +140,7 @@ then writes `<profile>/.colors-recovery-verified` beside the sets.
 
 ```sh
 ssh -L 6379:127.0.0.1:6379 <profile>
-REDISCLI_AUTH=$(ssh <profile> cat /etc/redis/secrets/password) redis-cli -p 6379
+REDISCLI_AUTH=$(ssh <profile> sudo -n cat /etc/redis/secrets/password) redis-cli -p 6379
 ```
 
 `ssh <profile> redis-status` prints the monitor result, the completed sets,

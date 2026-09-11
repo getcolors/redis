@@ -100,7 +100,7 @@ overlaying it points one deployment at another's.
 
 ```sh
 ssh -L 6379:127.0.0.1:6379 <profile>                       # the alias the package wrote
-REDISCLI_AUTH=$(ssh <profile> cat /etc/redis/secrets/password) redis-cli -p 6379
+REDISCLI_AUTH=$(ssh <profile> sudo -n cat /etc/redis/secrets/password) redis-cli -p 6379
 ssh <profile> redis-status                                 # monitor, sets, marker, container
 ```
 

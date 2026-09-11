@@ -141,3 +141,18 @@
   (is (= {"backups" true "region" "ams"}
          (cheshire.core/parse-string
           (#'io.github.getcolors.redis.tools/compute-json {:region "ams" "backups" true} 0)))))
+
+(deftest the-password-is-read-as-root-whoever-the-alias-logs-in-as
+  ;; root on the Vultr and DigitalOcean images, ubuntu on the AWS AMI: the
+  ;; plain read serves the first, the passwordless-sudo fallback the second.
+  (let [seen (atom nil)]
+    (with-redefs [tools/run-quiet (fn [args _ _] (reset! seen args) {:exit 0 :out "generated\n" :err ""})]
+      (is (= "generated" (tools/read-remote-password (aws-fixture))))
+      (let [[ssh _ _ alias command] @seen]
+        (is (= "ssh" ssh))
+        (is (= "redis-aws-fixture" alias))
+        (is (str/starts-with? command "cat /etc/redis/secrets/password"))
+        (is (str/includes? command "|| sudo -n cat /etc/redis/secrets/password"))))
+    (testing "a failed read is nil, never a partial reply"
+      (with-redefs [tools/run-quiet (fn [& _] {:exit 1 :out "" :err "Permission denied"})]
+        (is (nil? (tools/read-remote-password (aws-fixture))))))))
