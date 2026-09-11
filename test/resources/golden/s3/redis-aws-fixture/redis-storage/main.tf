@@ -31,7 +31,12 @@ resource "aws_s3_bucket_public_access_block" "application" {
 resource "aws_s3_bucket_server_side_encryption_configuration" "application" {
   for_each = aws_s3_bucket.application
   bucket = each.value.id
+  # AWS reports SSE-C blocked and the bucket key off on a new bucket; declare
+  # both, or every plan after the first rewrites the rule in place (drift the
+  # clickhouse package met first).
   rule {
+    blocked_encryption_types = ["SSE-C"]
+    bucket_key_enabled = false
     apply_server_side_encryption_by_default { sse_algorithm = "AES256" }
   }
 }
