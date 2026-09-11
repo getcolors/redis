@@ -8,9 +8,10 @@ nowhere else. RDB backup sets go to an S3-compatible bucket (Cloudflare R2,
 or on AWS a bucket the deployment owns) with a completion protocol, and
 `./green rehearse` proves one of them restores.
 
-The green (Clojure/Babashka) implementation lives in `green/`; the repository
-carries the tri-colour layout so that red (TypeScript/Bun) and blue
-(Python/uv) ports can land beside it as byte-identical siblings.
+The green (Clojure/Babashka) implementation lives in `green/` and the red
+(TypeScript/Bun) one in `red/`; they render every fixture byte for byte the
+same, and the repository carries the tri-colour layout so that a blue
+(Python/uv) port can land beside them as a third identical sibling.
 
 Nothing is published beyond loopback and the package creates no private
 network of its own (on AWS the library owns the VPC an instance cannot exist
@@ -27,12 +28,14 @@ fresh deployment.
 
 ```sh
 npx skills add getcolors/redis
-cp .agents/skills/package-redis-green/green ./green
+cp .agents/skills/package-redis-green/green ./green   # or package-redis-red/red ./red
 chmod +x green
 ```
 
 The launcher in your project root is a **copy**, not a symlink. After
 `npx skills update -p`, copy it again or the project keeps running the old pin.
+The green launcher runs under Babashka, the red one under Bun; the verbs
+below are the same through either.
 
 ## Use
 
@@ -151,10 +154,12 @@ goes straight to the finalizer, which proves the absence.
 
 ```sh
 cd green && bb test && bb golden && bb syntax
+cd red && bun install && bun test && bun run typecheck
 ./scripts/launcher.sh
 ./scripts/parity.sh
 ```
 
-Green is canonical. `scripts/parity.sh` renders every fixture and, once the
-red and blue ports land, diffs their trees against green's byte for byte.
-See `CLAUDE.md` for the traps this package has already paid for.
+Green is canonical. `scripts/parity.sh` renders every fixture through green
+and red and diffs the trees byte for byte, and will do the same for blue
+once that port lands. See `CLAUDE.md` for the traps this package has already
+paid for.

@@ -1,10 +1,10 @@
 (ns pin (:require [clojure.java.shell :as sh] [clojure.string :as str]))
-;; One SHA, one payload today and three tomorrow. Every payload is born
+;; One SHA, two payloads today and three tomorrow. Every payload is born
 ;; unpinned (no invented SHAs) and `bb pin` stamps or re-stamps it after a
 ;; clean, pushed HEAD. Each site recognises exactly two forms, its unpinned
 ;; birth shape and its pinned shape, and the run fails loudly when a payload
-;; matches neither. Modelled on neon/green/tasks/pin.clj: the red and blue
-;; sites drop in beside the green one when those ports land.
+;; matches neither. Modelled on neon/green/tasks/pin.clj: the blue site drops
+;; in beside the green and red ones when that port lands.
 (defn git [& args] (let [{:keys [exit out]} (apply sh/sh "git" args)] (when (zero? exit) (str/trim out))))
 
 (defn stamp-green [s sha]
@@ -12,9 +12,16 @@
     (str/replace-first s #"\(def \^:private redis-sha (?:nil|\"[0-9a-f]{40}\")\)"
                        (str "(def ^:private redis-sha \"" sha "\")"))))
 
+(defn stamp-red [s sha]
+  (let [pinned (str "\"package-redis-red\": \"github:getcolors/redis#" sha "\",")]
+    (cond (str/includes? s "\"package-redis-red\": null,")
+          (str/replace-first s "\"package-redis-red\": null," pinned)
+          (re-find #"\"package-redis-red\": \"github:getcolors/redis#[0-9a-f]{40}\"," s)
+          (str/replace-first s #"\"package-redis-red\": \"github:getcolors/redis#[0-9a-f]{40}\"," pinned))))
+
 (def sites
   [{:path "../skills/package-redis-green/green" :stamp stamp-green}
-   ;; {:path "../skills/package-redis-red/red" :stamp stamp-red}
+   {:path "../skills/package-redis-red/red" :stamp stamp-red}
    ;; {:path "../skills/package-redis-blue/blue" :stamp stamp-blue}
    ])
 

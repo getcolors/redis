@@ -56,4 +56,59 @@ ok 'lifecycle, rehearsal and describe commands are dispatchable'
 [ -L "$root/green/green" ] && [ "$(readlink "$root/green/green")" = ../skills/package-redis-green/green ] || fail 'green/green is not the payload symlink'
 [ ! -e "$root/green" ] || [ -d "$root/green" ] || fail 'the repository root must carry no launcher of its own'
 ok 'green/green is the payload symlink and the root carries no launcher'
+
+# --- red -------------------------------------------------------------------
+# The same contract for the red payload: it dispatches to the library and
+# nothing else, carries exactly one pin site in the form `bb pin` rewrites,
+# resolves colors-compute at the commit green's deps.edn pins, and a copy
+# outside the repository renders every stage, finds colors.yml upward and
+# refuses the profile overlay.
+
+red_launcher="$root/skills/package-redis-red/red"
+[ -f "$red_launcher" ] || fail 'red payload launcher is missing'
+grep -q 'import("package-redis-red")' "$red_launcher" || fail 'red workflow dispatch is missing'
+grep -q 'REDIS_LIB_ROOT' "$red_launcher" || fail 'red launcher has no working-tree override'
+for bad in 'tofu' 'ansible-playbook' 'red/exit'; do
+  ! grep -q "$bad" "$red_launcher" || fail "red launcher contains package logic: $bad"
+done
+ok 'red dispatches to the library and contains no lifecycle logic'
+
+grep -qE '^  "package-redis-red": (null|"github:getcolors/redis#[0-9a-f]{40}"),$' "$red_launcher" || fail 'invalid red pin site'
+[[ $(grep -c '"package-redis-red":' "$red_launcher") == 1 ]] || fail 'more than one red pin site'
+ok 'red has one managed immutable pin site'
+
+compute_sha=$(awk '/colors-compute\.git/ {found=1} found && match($0, /:git\/sha "[0-9a-f]{40}"/) {print substr($0, RSTART+10, 40); exit}' "$root/green/deps.edn")
+[[ -n $compute_sha ]] || fail 'green/deps.edn carries no colors-compute pin'
+grep -q "getcolors/colors-compute#$compute_sha" "$red_launcher" || fail 'red launcher pins colors-compute at a different commit than green'
+grep -q "getcolors/colors-compute#$compute_sha" "$root/red/package.json" || fail 'red/package.json pins colors-compute at a different commit than green'
+grep -q "getcolors/colors-compute#$compute_sha" "$root/package.json" || fail 'the root package.json pins colors-compute at a different commit than green'
+ok 'every red record of the colors-compute pin matches green'
+
+mkdir "$tmp/red-project"
+cp "$red_launcher" "$tmp/red-project/red"; chmod +x "$tmp/red-project/red"
+sed "s#WORKDIR#.colors#" "$root/test/fixtures/colors.yml" > "$tmp/red-project/colors.yml"
+(cd "$tmp/red-project" && REDIS_LIB_ROOT="$root/red" ./red build >/dev/null) || fail 'red REDIS_LIB_ROOT build failed'
+[ -f "$tmp/red-project/.colors/redis-fixture/redis-infrastructure/nodes/0/node-none.tf.json" ] || fail 'red copied payload rendered nothing'
+[ -f "$tmp/red-project/.colors/redis-fixture/redis-ansible/compose.yml" ] || fail 'red rendered no ansible stage'
+[ -f "$tmp/red-project/.colors/redis-fixture/redis-ansible-local/main.yml" ] || fail 'red rendered no ssh-config stage'
+ok 'red working-tree override renders from a copied payload'
+mkdir -p "$tmp/red-project/deep/path"
+(cd "$tmp/red-project/deep/path" && REDIS_LIB_ROOT="$root/red" ../../red build >/dev/null) || fail 'red upward desired-state search failed'
+ok 'red finds colors.yml by walking upward'
+
+out=$(cd "$tmp/red-project" && REDIS_LIB_ROOT="$root/red" COLORS_PAR_PROFILE=wrong ./red build 2>&1 || true)
+grep -q COLORS_PAR_PROFILE <<<"$out" || fail 'red did not refuse COLORS_PAR_PROFILE'
+[[ ! -d "$tmp/red-project/.colors/wrong" ]] || fail 'red rendered a stage for a profile overlay'
+ok 'red refuses the profile overlay'
+
+out=$(cd "$tmp/red-project" && REDIS_LIB_ROOT="$root/red" ./red nonsense 2>&1 || true)
+grep -q Usage <<<"$out" || fail 'red unknown command has no usage'
+for verb in create delete rehearse describe; do
+  (cd "$tmp/red-project" && REDIS_LIB_ROOT="$root/red" ./red "$verb" --dry-run >/dev/null 2>&1) || fail "red $verb --dry-run failed"
+done
+ok 'red lifecycle, rehearsal and describe commands are dispatchable'
+
+[ -L "$root/red/red" ] && [ "$(readlink "$root/red/red")" = ../skills/package-redis-red/red ] || fail 'red/red is not the payload symlink'
+[ ! -e "$root/red" ] || [ -d "$root/red" ] || fail 'the repository root must carry no red launcher of its own'
+ok 'red/red is the payload symlink and the root carries no launcher'
 echo "launcher: $checks checks passed"

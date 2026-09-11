@@ -11,8 +11,10 @@ jobs:
         with:
           bb: latest
       - uses: astral-sh/setup-uv@v6
+      - uses: oven-sh/setup-bun@v2
       - run: cd green && bb test
       - run: cd green && bb golden
+      - run: cd red && bun install --frozen-lockfile && bun test && bun run typecheck
       - run: ./scripts/launcher.sh
       - run: ./scripts/parity.sh
       - run: uv run --with ansible-core python scripts/ssh-config-probe.py
