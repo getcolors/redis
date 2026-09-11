@@ -1,15 +1,17 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["package-redis-blue", "blue", "colors-compute-blue @ git+https://github.com/getcolors/colors-compute.git@09ec539e75dc21c4dafb019eb8f9da276e695f6f#subdirectory=blue"]
+#
+# [tool.uv.sources]
+# package-redis-blue = { git = "https://github.com/getcolors/redis.git", rev = "8659002b4a30976e4fea1efd282d5df70842da28", subdirectory = "blue" }
+# blue = { git = "https://github.com/getcolors/blue.git", rev = "290f313ead5ca162875c33a049c880da017eae09" }
 # ///
 #
 # Managed by `bb pin` — do not edit by hand, and never invent a SHA.
 #
-# UNPINNED: this payload has not been stamped yet. `bb pin` collapses this
-# paragraph and adds the git sources for package-redis-blue, blue and
-# colors-compute-blue once the redis repository has been pushed. Point the
-# launcher at a working tree meanwhile: REDIS_LIB_ROOT=/path/to/redis
+# Stamped by `bb pin`. REDIS_LIB_ROOT=/path/to/redis still overrides the
+# pin with a working tree.
 """Thin launcher for package-redis-blue.
 
 This file is both the skill payload and the repository entry point:
