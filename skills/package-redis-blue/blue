@@ -4,7 +4,7 @@
 # dependencies = ["package-redis-blue", "blue", "colors-compute-blue @ git+https://github.com/getcolors/colors-compute.git@09ec539e75dc21c4dafb019eb8f9da276e695f6f#subdirectory=blue"]
 #
 # [tool.uv.sources]
-# package-redis-blue = { git = "https://github.com/getcolors/redis.git", rev = "dccd69629f06b006a14487714d18e9178396fea6", subdirectory = "blue" }
+# package-redis-blue = { git = "https://github.com/getcolors/redis.git", rev = "ffb0777f9d4099b6924b69eaf654f0c1652bfed1", subdirectory = "blue" }
 # blue = { git = "https://github.com/getcolors/blue.git", rev = "290f313ead5ca162875c33a049c880da017eae09" }
 # ///
 #

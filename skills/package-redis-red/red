@@ -38,7 +38,7 @@ import { homedir } from "node:os";
 // directory, which would halt Bun's upward resolution of `package-redis-red`
 // and break the development symlink at red/red.
 const PINS = {
-  "package-redis-red": "github:getcolors/redis#dccd69629f06b006a14487714d18e9178396fea6",
+  "package-redis-red": "github:getcolors/redis#ffb0777f9d4099b6924b69eaf654f0c1652bfed1",
   "colors-compute-red": "github:getcolors/colors-compute#09ec539e75dc21c4dafb019eb8f9da276e695f6f",
 };
 
