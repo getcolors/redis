@@ -8,9 +8,10 @@ nowhere else. RDB backup sets go to an S3-compatible bucket (Cloudflare R2,
 or on AWS a bucket the deployment owns) with a completion protocol, and
 `./green rehearse` proves one of them restores.
 
-The green (Clojure/Babashka) implementation lives in `green/`; the repository
-carries the tri-colour layout so that red (TypeScript/Bun) and blue
-(Python/uv) ports can land beside it as byte-identical siblings.
+The green (Clojure/Babashka) implementation lives in `green/` and the blue
+(Python/uv) one in `blue/`; the repository carries the tri-colour layout so
+that the red (TypeScript/Bun) port can land beside them as a byte-identical
+sibling.
 
 Nothing is published beyond loopback and the package creates no private
 network of its own (on AWS the library owns the VPC an instance cannot exist
@@ -151,10 +152,11 @@ goes straight to the finalizer, which proves the absence.
 
 ```sh
 cd green && bb test && bb golden && bb syntax
+cd blue && uv sync && uv run pytest
 ./scripts/launcher.sh
 ./scripts/parity.sh
 ```
 
-Green is canonical. `scripts/parity.sh` renders every fixture and, once the
-red and blue ports land, diffs their trees against green's byte for byte.
+Green is canonical. `scripts/parity.sh` renders every fixture through green
+and blue and diffs the trees byte for byte; red joins when its port lands.
 See `CLAUDE.md` for the traps this package has already paid for.

@@ -13,6 +13,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - run: cd green && bb test
       - run: cd green && bb golden
+      - run: cd blue && uv sync && uv run pytest
       - run: ./scripts/launcher.sh
       - run: ./scripts/parity.sh
       - run: uv run --with ansible-core python scripts/ssh-config-probe.py

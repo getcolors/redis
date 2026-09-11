@@ -17,18 +17,22 @@ from `../langfuse`, and the managed bucket from `../neon-multi-node`.
 
 ## Layout
 
-The repository carries the tri-colour layout of `../neon`. Today only the
-green implementation exists: `green/` holds `bb.edn`, `deps.edn`, `src/`,
-`tasks/` and `test/clj/`; `green/green` is a symlink to the payload
-`skills/package-redis-green/green`, and there is no launcher at the root.
+The repository carries the tri-colour layout of `../neon`. Green and blue
+exist today: `green/` holds `bb.edn`, `deps.edn`, `src/`, `tasks/` and
+`test/clj/`, and `green/green` is a symlink to the payload
+`skills/package-redis-green/green`; `blue/` holds `pyproject.toml`,
+`src/package_redis_blue/` and `tests/`, and `blue/blue` is a symlink to the
+payload `skills/package-redis-blue/blue`. There is no launcher at the root.
 Fixtures and goldens are shared at the root (`test/fixtures/`,
 `test/resources/golden/<backend>/<profile>/`) with symlinks from
-`green/test/`. The root `package.json` is the facade the red port drops
-into, `scripts/parity.sh` renders every fixture and carries the disabled red
-and blue lines, and `green/tasks/pin.clj` stamps the green site and is
-shaped so the red and blue sites can be added. A red or blue port must
-render every fixture byte-identically to green and copy green's template
-tree; it must not own templates of its own.
+`green/test/`; the blue tests read them through `tests/conftest.py`. The
+root `package.json` is the facade the red port drops into,
+`scripts/parity.sh` renders every fixture through green and blue and carries
+the disabled red line, and `green/tasks/pin.clj` stamps the green and blue
+sites and is shaped so the red site can be added. Blue's
+`src/package_redis_blue/resources` is a byte-identical copy of green's
+template tree, enforced by `scripts/parity.sh`; a port must render every
+fixture byte-identically to green and must not own templates of its own.
 
 ## Things to understand before touching anything
 
@@ -138,10 +142,11 @@ dry-run render `/home/build-placeholder/.ssh/<profile>` rather than reading
 ```sh
 cd green && bb test
 cd green && bb golden      # six fixtures: keygen and opt-out on Vultr, DigitalOcean and AWS
+cd blue && uv sync && uv run pytest
 cd green && bb golden:accept   # only after reading the diff
 cd green && bb syntax      # offline ansible-playbook --syntax-check + bash -n
 ./scripts/launcher.sh      # from the repository root
-./scripts/parity.sh        # every fixture through every colour that exists
+./scripts/parity.sh        # every fixture through green and blue, byte for byte
 cd green && ./green build
 cd green && ./green create --dry-run
 cd green && ./green create     # requires explicit authorization
@@ -161,7 +166,10 @@ must not touch `~/.ssh`.
 
 ## Coupling
 
-`green/deps.edn` pins Green and colors-compute. Provider support changes
+`green/deps.edn` pins Green and colors-compute; `blue/pyproject.toml` pins
+the blue SDK and colors-compute at the commits the green pins correspond
+to, and the blue payload's PEP 723 block repeats them once `bb pin` stamps
+it. Provider support changes
 belong in colors-compute and reach Redis through a library version bump; the
 managed S3 backend (`compute-managed-backend`) and AWS arrived with the pin
 at `09ec539`. Use `GREEN_LIB_ROOT`, `COLORS_COMPUTE_LIB_ROOT` and

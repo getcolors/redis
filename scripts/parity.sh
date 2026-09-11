@@ -16,15 +16,15 @@ set -euo pipefail
 # *_LIB_ROOT overrides) while the SDKs and colors-compute stay on their pins,
 # so a change that lands here passes parity before it is pushed or pinned.
 #
-# Green only for now: the red and blue lines are present and disabled. When
-# a port lands, set its variable to 1 (or delete the guard) and its render
-# and diffs join the loop; the template-tree diffs at the end likewise.
+# Green and blue render today; the red line is present and disabled. When
+# the red port lands, set its variable to 1 (or delete the guard) and its
+# render and diffs join the loop; the template-tree diff at the end likewise.
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 
 RED=${REDIS_PARITY_RED:-0}    # set to 1 once red/ exists
-BLUE=${REDIS_PARITY_BLUE:-0}  # set to 1 once blue/ exists
+BLUE=${REDIS_PARITY_BLUE:-1}  # blue/ exists; 0 skips it
 
 build_variant() {
   local variant=$1
@@ -54,4 +54,4 @@ done
 colours=green
 [[ $RED == 1 ]] && colours="$colours, red"
 [[ $BLUE == 1 ]] && colours="$colours, blue"
-echo "Redis artifacts render for every fixture in: $colours (red and blue join here when their ports land)"
+echo "Redis artifacts render byte-identically for every fixture in: $colours (red joins here when its port lands)"
