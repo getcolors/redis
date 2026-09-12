@@ -27,7 +27,7 @@
 
 ;; Managed by `bb pin` — do not edit by hand. An initial nil is intentional:
 ;; the repository must be committed and pushed before a real SHA can be stamped.
-(def ^:private redis-sha "ffb0777f9d4099b6924b69eaf654f0c1652bfed1")
+(def ^:private redis-sha "9d0077f87a84c9250e74c47b13ee30daffe5bcfe")
 
 (def ^:private redis-git-url "https://github.com/getcolors/redis.git")
 (def ^:private green-git-url "https://github.com/getcolors/green.git")
