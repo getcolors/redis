@@ -13,7 +13,7 @@ dependencies = [
 # depend on ONCE.
 [tool.uv.sources]
 blue = { git = "https://github.com/getcolors/blue.git", rev = "290f313ead5ca162875c33a049c880da017eae09" }
-colors-compute-blue = { git = "https://github.com/getcolors/colors-compute.git", subdirectory = "blue", rev = "09ec539e75dc21c4dafb019eb8f9da276e695f6f" }
+colors-compute-blue = { git = "https://github.com/getcolors/colors-compute.git", subdirectory = "blue", rev = "ae28ea74962bb1897fa6365c143c1d43ac1fe095" }
 
 [dependency-groups]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.24"]

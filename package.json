@@ -11,14 +11,10 @@
     "red/resources"
   ],
   "peerDependencies": {
-    "red": "*",
-    "colors-compute-red": "*"
+    "red": "*"
   },
   "peerDependenciesMeta": {
     "red": {
-      "optional": true
-    },
-    "colors-compute-red": {
       "optional": true
     }
   },
@@ -27,8 +23,7 @@
     "typecheck": "cd red && bun run typecheck",
     "parity": "./scripts/parity.sh"
   },
-  "dependencies": {},
-  "devDependencies": {
-    "colors-compute-red": "github:getcolors/colors-compute#09ec539e75dc21c4dafb019eb8f9da276e695f6f"
+  "dependencies": {
+    "colors-compute-red": "github:getcolors/colors-compute#ae28ea74962bb1897fa6365c143c1d43ac1fe095"
   }
 }

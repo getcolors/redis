@@ -32,7 +32,7 @@ wheels = [
 [[package]]
 name = "colors-compute-blue"
 version = "0.1.0"
-source = { git = "https://github.com/getcolors/colors-compute.git?subdirectory=blue&rev=09ec539e75dc21c4dafb019eb8f9da276e695f6f#09ec539e75dc21c4dafb019eb8f9da276e695f6f" }
+source = { git = "https://github.com/getcolors/colors-compute.git?subdirectory=blue&rev=ae28ea74962bb1897fa6365c143c1d43ac1fe095#ae28ea74962bb1897fa6365c143c1d43ac1fe095" }
 dependencies = [
     { name = "blue" },
 ]
@@ -64,7 +64,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "blue", git = "https://github.com/getcolors/blue.git?rev=290f313ead5ca162875c33a049c880da017eae09" },
-    { name = "colors-compute-blue", git = "https://github.com/getcolors/colors-compute.git?subdirectory=blue&rev=09ec539e75dc21c4dafb019eb8f9da276e695f6f" },
+    { name = "colors-compute-blue", git = "https://github.com/getcolors/colors-compute.git?subdirectory=blue&rev=ae28ea74962bb1897fa6365c143c1d43ac1fe095" },
 ]
 
 [package.metadata.requires-dev]

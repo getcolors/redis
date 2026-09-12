@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "red": "github:getcolors/red#db9bfe61282e2093f4098bf5a6ee0cd10added6e",
-    "colors-compute-red": "github:getcolors/colors-compute#09ec539e75dc21c4dafb019eb8f9da276e695f6f"
+    "colors-compute-red": "github:getcolors/colors-compute#ae28ea74962bb1897fa6365c143c1d43ac1fe095"
   },
   "devDependencies": {
     "@types/bun": "^1.2.0",
