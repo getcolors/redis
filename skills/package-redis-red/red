@@ -38,7 +38,7 @@ import { homedir } from "node:os";
 // directory, which would halt Bun's upward resolution of `package-redis-red`
 // and break the development symlink at red/red.
 const PINS = {
-  "package-redis-red": "github:getcolors/redis#9d0077f87a84c9250e74c47b13ee30daffe5bcfe",
+  "package-redis-red": "github:getcolors/redis#6aeb2b00f3ccb05f47598dc93be6260a26c2840d",
   "colors-compute-red": "github:getcolors/colors-compute#ae28ea74962bb1897fa6365c143c1d43ac1fe095",
   // The Red SDK is a peer of colors-compute-red, not a dependency: a cold
   // cache installs nothing for a peer, so the consumer pins it explicitly, at
