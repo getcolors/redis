@@ -40,6 +40,10 @@ import { homedir } from "node:os";
 const PINS = {
   "package-redis-red": "github:getcolors/redis#9d0077f87a84c9250e74c47b13ee30daffe5bcfe",
   "colors-compute-red": "github:getcolors/colors-compute#ae28ea74962bb1897fa6365c143c1d43ac1fe095",
+  // The Red SDK is a peer of colors-compute-red, not a dependency: a cold
+  // cache installs nothing for a peer, so the consumer pins it explicitly, at
+  // the commit red/package.json pins. scripts/launcher.sh checks they agree.
+  "red": "github:getcolors/red#db9bfe61282e2093f4098bf5a6ee0cd10added6e",
 };
 
 // PINS is the only source of versions, as green's inline SHA is for it. A
