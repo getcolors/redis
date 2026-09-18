@@ -1,5 +1,8 @@
 (ns io.github.getcolors.redis.workflow-test
  (:require [clojure.test :refer [deftest is testing]] [clojure.java.io :as io] [clojure.string :as str]
+           [io.github.getcolors.redis.validate :as validate]
+           [io.github.getcolors.compute-diagnostics :as diagnostics]
+           [io.github.getcolors.redis.ssh-config :as ssh-config]
            [green.workflow :as engine] [io.github.getcolors.redis.workflow :as workflow]
            [io.github.getcolors.redis.tools :as tools] [io.github.getcolors.redis.compute :as compute]
            [io.github.getcolors.compute-orchestration :as orchestration]
@@ -8,6 +11,21 @@
            [io.github.getcolors.redis.storage :as storage]
            [io.github.getcolors.redis.validate-test :refer [fixture optout do-fixture do-optout aws-fixture aws-optout all-fixtures]]))
 (defn- route [event opts start] (loop [step start path [step]] (let [[_ next] (workflow/wire-fn step (assoc opts :green/event event))] (if next (recur next (conj path next)) path))))
+(deftest missing-tools-stop-before-any-live-work
+ (let [opts (fixture :green/event :create
+                     :redis-backup-r2-access-key-id "fixture-access"
+                     :redis-backup-r2-secret-access-key "fixture-secret")]
+  (with-redefs [diagnostics/missing-tools (fn [_ _] ["tofu"])
+                validate/executable-on-path? (fn [program _] (not (= "ansible-playbook" program)))
+                ssh-config/preflight! (fn [_] (throw (AssertionError. "must stop before SSH preflight")))]
+   (let [r (workflow/start-step opts {"PATH" "/tools"})]
+    (is (= 2 (:green/exit r)))
+    (is (str/includes? (:green/err r) "Missing: tofu."))
+    (is (str/includes? (:green/err r) "required executable is not on PATH: ansible-playbook"))))
+  (with-redefs [diagnostics/missing-tools (fn [& _] (throw (AssertionError. "preview must not inspect infrastructure tools")))
+                validate/executable-on-path? (fn [& _] (throw (AssertionError. "preview must not inspect executables")))]
+   (doseq [preview [(assoc opts :green/event :build) (assoc opts :green/dry-run true)]]
+    (is (= 0 (:green/exit (workflow/start-step preview {}))))))))
 (deftest cleanup-order-and-read-only-events
  (is (= [tools/load-infrastructure-step :redis/ansible] (workflow/wire-fn :redis/load-infrastructure {:green/event :delete})))
  (is (= [tools/ansible-local-step :redis/infrastructure] (workflow/wire-fn :redis/ssh-config {:green/event :delete})))

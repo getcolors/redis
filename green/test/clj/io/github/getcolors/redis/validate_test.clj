@@ -64,3 +64,12 @@
   (is (not (validate/keygen? (optout))))
   (is (not (validate/keygen? (do-optout))))
   (is (not (validate/keygen? (aws-optout)))))
+
+(deftest runtime-tools-follow-the-selected-ssh-mode
+  (doseq [[opts expected] [[(fixture) "Missing: aws, ssh-keygen, tofu."]
+                           [(optout) "Missing: aws, tofu."]]]
+    (let [errors (validate/runtime-tool-errors opts {})]
+      (is (str/includes? (first errors) expected))
+      (is (= 6 (count errors)))
+      (doseq [tool ["ansible-playbook" "ssh" "redis-cli" "bash" "timeout"]]
+        (is (some #(str/includes? % (str "required executable is not on PATH: " tool ";")) errors))))))

@@ -23,7 +23,7 @@
 ;; is no override-dependencies block: the two git requirements already agree.
 (def blue-unpinned-meta "# dependencies = []\n# ///")
 (defn blue-pinned-meta [sha]
-  (str "# dependencies = [\"package-redis-blue\", \"blue\", \"colors-compute-blue @ git+https://github.com/getcolors/colors-compute.git@ae28ea74962bb1897fa6365c143c1d43ac1fe095#subdirectory=blue\"]\n"
+  (str "# dependencies = [\"package-redis-blue\", \"blue\", \"colors-compute-blue @ git+https://github.com/getcolors/colors-compute.git@73341a51a20a8e052e5432461fb03a7ab30ff2cd#subdirectory=blue\"]\n"
        "#\n"
        "# [tool.uv.sources]\n"
        "# package-redis-blue = { git = \"https://github.com/getcolors/redis.git\", rev = \"" sha "\", subdirectory = \"blue\" }\n"

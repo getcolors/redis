@@ -22,6 +22,8 @@
           :validators [(fn [_ env _] (validate/env-errors env))
                        (fn [opts _ _] (validate/state-errors opts))
                        (fn [opts _ {:keys [event real?]}] (when real? (validate/secret-errors opts event)))
+                       (fn [opts env {:keys [event real?]}]
+                         (when (and real? (= :create event)) (validate/runtime-tool-errors opts env)))
                        (fn [opts _ {:keys [event real?]}]
                          (when (and real? (= :delete event) (:compute-prevent-destroy opts))
                            ["compute destruction is protected; set COLORS_PAR_COMPUTE_PREVENT_DESTROY=false to delete"]))]

@@ -1,6 +1,8 @@
 (ns io.github.getcolors.redis.validate
-  (:require [clojure.string :as str]
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]
             [green.cli :as green-cli]
+            [io.github.getcolors.compute-diagnostics :as diagnostics]
             [io.github.getcolors.compute-ssh :as ssh]
             [io.github.getcolors.compute :as render]))
 
@@ -29,6 +31,21 @@
 (defn env-errors [env]
   (when (not-empty (str (get env profile-par)))
     [(str profile-par " is set; profile must come from colors.yml only")]))
+
+(defn executable-on-path? [program paths]
+  (boolean (some (fn [path]
+                   (let [file (io/file (if (str/blank? path) "." path) program)]
+                     (and (.isFile file) (.canExecute file)))) paths)))
+
+(defn runtime-tool-errors [opts env]
+  ;; Check before acquiring remote ownership or generating the machine key.
+  (let [paths (when (contains? env "PATH") (str/split (get env "PATH") #":" -1))
+        missing (diagnostics/missing-tools opts env)]
+    (concat
+     (when (seq missing) (:errors (diagnostics/result (diagnostics/failure "missing-tool" missing))))
+     (for [program ["ansible-playbook" "ssh" "redis-cli" "bash" "timeout"]
+          :when (not (executable-on-path? program paths))]
+      (str "required executable is not on PATH: " program "; load the deployment toolchain first")))))
 
 (defn- positive-int? [v] (and (integer? v) (pos? v)))
 
